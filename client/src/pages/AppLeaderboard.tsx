@@ -1,5 +1,6 @@
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { normalizeAvatarEmoji } from "@shared/const";
 import { Users, Loader2 } from "lucide-react";
 import { useState } from "react";
 
@@ -137,7 +138,7 @@ export default function AppLeaderboard() {
             const rank = index + 1;
             const rankEmoji = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "";
             const displayName = leader.displayName ?? leader.name ?? "Anonymous Explorer";
-            const emoji = leader.avatarEmoji ?? "🎯";
+            const emoji = normalizeAvatarEmoji(leader.avatarEmoji);
             const isMe = leader.id === user?.id;
 
             return (

@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, normalizeAvatarEmoji } from "@shared/const";
 import { compare, hash } from "bcryptjs";
 import { TRPCError } from "@trpc/server";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -234,12 +234,18 @@ export const appRouter = router({
         z.object({
           displayName: z.string().max(128).optional(),
           bio: z.string().max(500).optional(),
-          avatarEmoji: z.string().max(8).optional(),
+          avatarEmoji: z.string().max(32).optional(),
           isPublic: z.boolean().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        return upsertUserSettings(ctx.user.id, input);
+        return upsertUserSettings(ctx.user.id, {
+          ...input,
+          avatarEmoji:
+            input.avatarEmoji === undefined
+              ? undefined
+              : normalizeAvatarEmoji(input.avatarEmoji),
+        });
       }),
   }),
 });

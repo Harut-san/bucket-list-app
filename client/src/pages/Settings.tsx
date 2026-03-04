@@ -1,13 +1,9 @@
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { AVATAR_EMOJIS, DEFAULT_AVATAR_EMOJI, normalizeAvatarEmoji } from "@shared/const";
 import { useState, useEffect } from "react";
 import { Settings2, Loader2, Check, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
-
-const AVATAR_EMOJIS = [
-  "🎯", "🌟", "🚀", "🏔️", "🌊", "🎨", "📚", "🎸", "🌍", "🦋",
-  "🔥", "💫", "🌈", "🎭", "🏄", "🧗", "🌺", "🦁", "🐉", "✨",
-];
 
 export default function Settings() {
   const { user } = useAuth();
@@ -16,7 +12,7 @@ export default function Settings() {
 
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
-  const [avatarEmoji, setAvatarEmoji] = useState("🎯");
+  const [avatarEmoji, setAvatarEmoji] = useState<string>(DEFAULT_AVATAR_EMOJI);
   const [isPublic, setIsPublic] = useState(true);
   const [saved, setSaved] = useState(false);
 
@@ -24,7 +20,7 @@ export default function Settings() {
     if (settings) {
       setDisplayName(settings.displayName ?? user?.name ?? "");
       setBio(settings.bio ?? "");
-      setAvatarEmoji(settings.avatarEmoji ?? "🎯");
+      setAvatarEmoji(normalizeAvatarEmoji(settings.avatarEmoji));
       setIsPublic(settings.isPublic ?? true);
     } else if (user) {
       setDisplayName(user.name ?? "");
@@ -46,7 +42,7 @@ export default function Settings() {
     updateMutation.mutate({
       displayName: displayName.trim() || undefined,
       bio: bio.trim() || undefined,
-      avatarEmoji,
+      avatarEmoji: normalizeAvatarEmoji(avatarEmoji),
       isPublic,
     });
   };

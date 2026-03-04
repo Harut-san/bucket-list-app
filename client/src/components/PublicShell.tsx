@@ -59,7 +59,7 @@ export default function PublicShell({ children }: PublicShellProps) {
         <SketchDecoration />
 
         {/* Header */}
-        <div className="relative z-10 px-4 md:px-6 pt-6 pb-4">
+        <div className="relative z-20 px-4 md:px-6 pt-6 pb-4">
           {/* Title row */}
           <div className="flex items-start justify-between gap-4 mb-1">
             <Link href="/">

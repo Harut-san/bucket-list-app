@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { normalizeAvatarEmoji } from "@shared/const";
 import { Users, Loader2 } from "lucide-react";
 import { useState } from "react";
 
@@ -140,7 +141,7 @@ export default function PublicLeaderboard() {
             const rank = index + 1;
             const rankEmoji = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "";
             const displayName = user.displayName ?? user.name ?? "Anonymous Explorer";
-            const emoji = user.avatarEmoji ?? "🎯";
+            const emoji = normalizeAvatarEmoji(user.avatarEmoji);
 
             return (
               <div

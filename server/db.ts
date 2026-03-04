@@ -375,12 +375,19 @@ export async function getTopGoals(limit = 100) {
   if (!db) return [];
 
   const result = await db.execute(
-    sql`SELECT g.id, g.title, g.category,
+    sql`SELECT
+        MIN(b.id) as id,
+        MIN(TRIM(b.title)) as title,
+        MAX(b.category) as category,
         COUNT(DISTINCT b.userId) as userCount
-      FROM global_goals g
-      LEFT JOIN bucket_items b ON b.globalGoalId = g.id
-      GROUP BY g.id, g.title, g.category
-      ORDER BY userCount DESC
+      FROM bucket_items b
+      LEFT JOIN user_settings us ON us.userId = b.userId
+      WHERE b.achieved = 1
+        AND b.title IS NOT NULL
+        AND TRIM(b.title) <> ''
+        AND (us.isPublic IS NULL OR us.isPublic = 1)
+      GROUP BY LOWER(TRIM(b.title))
+      ORDER BY userCount DESC, title ASC
       LIMIT ${limit}`
   );
 
