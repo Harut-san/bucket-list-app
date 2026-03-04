@@ -1,0 +1,425 @@
+import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/mysql2";
+import {
+  bucketItems,
+  globalGoals,
+  InsertBucketItem,
+  InsertUserSettings,
+  userSettings,
+  users,
+} from "../drizzle/schema";
+
+let _db: ReturnType<typeof drizzle> | null = null;
+
+export async function getDb() {
+  if (!_db && process.env.DATABASE_URL) {
+    try {
+      _db = drizzle(process.env.DATABASE_URL);
+    } catch (error) {
+      console.warn("[Database] Failed to connect:", error);
+      _db = null;
+    }
+  }
+  return _db;
+}
+
+// ─── Users ────────────────────────────────────────────────────────
+export async function getUserById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const normalizedEmail = email.trim().toLowerCase();
+  const result = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+  return result[0];
+}
+
+export async function createUser(input: { email: string; passwordHash: string; name?: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const result = await db.insert(users).values({
+    email: normalizedEmail,
+    passwordHash: input.passwordHash,
+    name: input.name ?? null,
+    lastSignedIn: new Date(),
+  });
+
+  const insertedId = Number((result as any)[0]?.insertId ?? 0);
+  const rows = await db.select().from(users).where(eq(users.id, insertedId)).limit(1);
+  return rows[0];
+}
+
+export async function updateUserLastSignedIn(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(users)
+    .set({ lastSignedIn: new Date() })
+    .where(eq(users.id, userId));
+}
+
+// ─── Bucket Items ─────────────────────────────────────────────────
+export async function getBucketItems(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(bucketItems)
+    .where(eq(bucketItems.userId, userId))
+    .orderBy(asc(bucketItems.sortOrder), asc(bucketItems.createdAt));
+}
+
+export async function addBucketItem(
+  userId: number,
+  data: { title: string; description?: string; category?: string }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  // Get max sortOrder
+  const existing = await db
+    .select({ sortOrder: bucketItems.sortOrder })
+    .from(bucketItems)
+    .where(eq(bucketItems.userId, userId))
+    .orderBy(desc(bucketItems.sortOrder))
+    .limit(1);
+
+  const nextOrder = (existing[0]?.sortOrder ?? -1) + 1;
+
+  const result = await db.insert(bucketItems).values({
+    userId,
+    title: data.title,
+    description: data.description ?? null,
+    category: data.category ?? null,
+    sortOrder: nextOrder,
+    achieved: false,
+  });
+
+  const id = Number((result as any)[0]?.insertId ?? 0);
+  const rows = await db.select().from(bucketItems).where(eq(bucketItems.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function updateBucketItem(
+  userId: number,
+  itemId: number,
+  data: { title?: string; description?: string; category?: string }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(bucketItems)
+    .set({ ...data })
+    .where(and(eq(bucketItems.id, itemId), eq(bucketItems.userId, userId)));
+  const rows = await db.select().from(bucketItems).where(eq(bucketItems.id, itemId)).limit(1);
+  return rows[0];
+}
+
+export async function deleteBucketItem(userId: number, itemId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .delete(bucketItems)
+    .where(and(eq(bucketItems.id, itemId), eq(bucketItems.userId, userId)));
+}
+
+export async function toggleBucketItemAchieved(userId: number, itemId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const rows = await db
+    .select()
+    .from(bucketItems)
+    .where(and(eq(bucketItems.id, itemId), eq(bucketItems.userId, userId)))
+    .limit(1);
+
+  if (!rows[0]) throw new Error("Item not found");
+  const newAchieved = !rows[0].achieved;
+
+  await db
+    .update(bucketItems)
+    .set({
+      achieved: newAchieved,
+      achievedAt: newAchieved ? new Date() : null,
+    })
+    .where(and(eq(bucketItems.id, itemId), eq(bucketItems.userId, userId)));
+
+  const updated = await db.select().from(bucketItems).where(eq(bucketItems.id, itemId)).limit(1);
+  return updated[0];
+}
+
+export async function reorderBucketItems(userId: number, orderedIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  // Update sortOrder for each item
+  await Promise.all(
+    orderedIds.map((id, index) =>
+      db
+        .update(bucketItems)
+        .set({ sortOrder: index })
+        .where(and(eq(bucketItems.id, id), eq(bucketItems.userId, userId)))
+    )
+  );
+}
+
+export async function getBucketStats(userId: number) {
+  const db = await getDb();
+  if (!db) return { total: 0, achieved: 0, rank: null };
+
+  const items = await db
+    .select({ achieved: bucketItems.achieved })
+    .from(bucketItems)
+    .where(eq(bucketItems.userId, userId));
+
+  const total = items.length;
+  const achieved = items.filter((i) => i.achieved).length;
+
+  // Get rank: count users with more achieved items
+  const rankResult = await db.execute(
+    sql`SELECT COUNT(*) as cnt FROM (
+      SELECT userId, SUM(achieved) as cnt
+      FROM bucket_items
+      GROUP BY userId
+      HAVING cnt > ${achieved}
+    ) sub`
+  );
+  const rank = Number((rankResult as any)[0]?.[0]?.cnt ?? 0) + 1;
+
+  return { total, achieved, rank };
+}
+
+// ─── Leaderboard ──────────────────────────────────────────────────
+export async function getLeaderboard(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db.execute(
+    sql`SELECT u.id, u.name, u.email,
+        COUNT(CASE WHEN b.achieved = 1 THEN 1 END) as achievedCount,
+        COUNT(b.id) as totalCount,
+        us.displayName, us.avatarEmoji, us.isPublic
+      FROM users u
+      LEFT JOIN bucket_items b ON b.userId = u.id
+      LEFT JOIN user_settings us ON us.userId = u.id
+      WHERE (us.isPublic IS NULL OR us.isPublic = 1)
+      GROUP BY u.id, u.name, u.email, us.displayName, us.avatarEmoji, us.isPublic
+      HAVING achievedCount > 0
+      ORDER BY achievedCount DESC, totalCount ASC
+      LIMIT ${limit}`
+  );
+
+  return (result as any)[0] as Array<{
+    id: number;
+    name: string | null;
+    email: string;
+    achievedCount: number;
+    totalCount: number;
+    displayName: string | null;
+    avatarEmoji: string | null;
+    isPublic: boolean;
+  }>;
+}
+
+// ─── Global Goals ─────────────────────────────────────────────────
+export async function getGlobalGoals(limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(globalGoals)
+    .orderBy(desc(globalGoals.addedCount), desc(globalGoals.createdAt))
+    .limit(limit);
+}
+
+export async function getCommunityGoalsPage(options: {
+  page: number;
+  pageSize: number;
+  category?: string;
+  excludeUserId?: number;
+  publicOnly?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) {
+    return { items: [], total: 0 };
+  }
+
+  const page = Math.max(1, options.page);
+  const pageSize = Math.min(50, Math.max(1, options.pageSize));
+  const offset = (page - 1) * pageSize;
+
+  const conditions = [sql`b.title IS NOT NULL`, sql`TRIM(b.title) <> ''`];
+
+  if (options.publicOnly !== false) {
+    conditions.push(sql`(us.isPublic IS NULL OR us.isPublic = 1)`);
+  }
+  if (options.excludeUserId != null) {
+    conditions.push(sql`b.userId <> ${options.excludeUserId}`);
+  }
+  if (options.category) {
+    conditions.push(sql`b.category = ${options.category}`);
+  }
+
+  const whereSql = sql`WHERE ${sql.join(conditions, sql` AND `)}`;
+
+  const itemsResult = await db.execute(sql`
+    SELECT
+      b.title,
+      b.category,
+      COUNT(DISTINCT b.userId) AS addedCount,
+      MAX(b.createdAt) AS latestAt
+    FROM bucket_items b
+    LEFT JOIN user_settings us ON us.userId = b.userId
+    ${whereSql}
+    GROUP BY b.title, b.category
+    ORDER BY addedCount DESC, latestAt DESC
+    LIMIT ${pageSize} OFFSET ${offset}
+  `);
+
+  const totalResult = await db.execute(sql`
+    SELECT COUNT(*) AS total
+    FROM (
+      SELECT b.title, b.category
+      FROM bucket_items b
+      LEFT JOIN user_settings us ON us.userId = b.userId
+      ${whereSql}
+      GROUP BY b.title, b.category
+    ) grouped_goals
+  `);
+
+  const rows = ((itemsResult as any)[0] ?? []) as Array<{
+    title: string;
+    category: string | null;
+    addedCount: number | string;
+  }>;
+  const total = Number((totalResult as any)[0]?.[0]?.total ?? 0);
+
+  return {
+    items: rows.map((row, index) => ({
+      id: offset + index + 1,
+      title: row.title,
+      category: row.category,
+      addedCount: Number(row.addedCount ?? 0),
+    })),
+    total,
+  };
+}
+
+export async function seedGlobalGoals() {
+  const db = await getDb();
+  if (!db) return;
+
+  const existing = await db.select({ id: globalGoals.id }).from(globalGoals).limit(1);
+  if (existing.length > 0) return; // Already seeded
+
+  const goals = [
+    { title: "See the Northern Lights", category: "Travel", addedCount: 1240 },
+    { title: "Climb a mountain", category: "Adventure", addedCount: 987 },
+    { title: "Learn to play guitar", category: "Skills", addedCount: 876 },
+    { title: "Visit Japan", category: "Travel", addedCount: 1102 },
+    { title: "Write a novel", category: "Creative", addedCount: 654 },
+    { title: "Go skydiving", category: "Adventure", addedCount: 789 },
+    { title: "Learn a new language", category: "Skills", addedCount: 932 },
+    { title: "See the Grand Canyon", category: "Travel", addedCount: 543 },
+    { title: "Run a marathon", category: "Fitness", addedCount: 712 },
+    { title: "Learn to cook 10 cuisines", category: "Food", addedCount: 421 },
+    { title: "Go on a road trip across the country", category: "Travel", addedCount: 634 },
+    { title: "Start a business", category: "Career", addedCount: 567 },
+    { title: "Learn to surf", category: "Adventure", addedCount: 489 },
+    { title: "Visit the Eiffel Tower", category: "Travel", addedCount: 823 },
+    { title: "Read 100 books", category: "Learning", addedCount: 398 },
+    { title: "Volunteer abroad", category: "Service", addedCount: 312 },
+    { title: "Learn to paint", category: "Creative", addedCount: 445 },
+    { title: "Go on a safari", category: "Travel", addedCount: 567 },
+    { title: "Swim with dolphins", category: "Adventure", addedCount: 678 },
+    { title: "See the Great Wall of China", category: "Travel", addedCount: 534 },
+  ];
+
+  await db.insert(globalGoals).values(goals);
+}
+
+// ─── User Settings ────────────────────────────────────────────────
+export async function getUserSettings(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertUserSettings(userId: number, data: Partial<InsertUserSettings>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const existing = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
+
+  if (existing.length > 0) {
+    await db.update(userSettings).set(data).where(eq(userSettings.userId, userId));
+  } else {
+    await db.insert(userSettings).values({ userId, ...data });
+  }
+
+  const rows = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
+  return rows[0];
+}
+
+// ─── Top Goals Leaderboard ────────────────────────────────────────
+export async function getTopGoals(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db.execute(
+    sql`SELECT g.id, g.title, g.category,
+        COUNT(DISTINCT b.userId) as userCount
+      FROM global_goals g
+      LEFT JOIN bucket_items b ON b.globalGoalId = g.id
+      GROUP BY g.id, g.title, g.category
+      ORDER BY userCount DESC
+      LIMIT ${limit}`
+  );
+
+  return (result as any)[0] as Array<{
+    id: number;
+    title: string;
+    category: string | null;
+    userCount: number;
+  }>;
+}
+
+// ─── Top Users Leaderboard ────────────────────────────────────────
+export async function getTopUsers(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db.execute(
+    sql`SELECT u.id, u.name, u.email,
+        COUNT(CASE WHEN b.achieved = 1 THEN 1 END) as achievedCount,
+        COUNT(b.id) as totalCount,
+        us.displayName, us.avatarEmoji, us.isPublic
+      FROM users u
+      LEFT JOIN bucket_items b ON b.userId = u.id
+      LEFT JOIN user_settings us ON us.userId = u.id
+      WHERE (us.isPublic IS NULL OR us.isPublic = 1)
+      GROUP BY u.id, u.name, u.email, us.displayName, us.avatarEmoji, us.isPublic
+      HAVING achievedCount > 0
+      ORDER BY achievedCount DESC, totalCount ASC
+      LIMIT ${limit}`
+  );
+
+  return (result as any)[0] as Array<{
+    id: number;
+    name: string | null;
+    email: string;
+    achievedCount: number;
+    totalCount: number;
+    displayName: string | null;
+    avatarEmoji: string | null;
+    isPublic: boolean;
+  }>;
+}

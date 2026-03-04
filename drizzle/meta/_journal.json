@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1772235529481,
+      "tag": "0000_third_thunderbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1772235655172,
+      "tag": "0001_stormy_vulcan",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1772586000000,
+      "tag": "0002_local_auth",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,247 @@
+import { z } from "zod/v4";
+import { COOKIE_NAME } from "@shared/const";
+import { compare, hash } from "bcryptjs";
+import { TRPCError } from "@trpc/server";
+import { getSessionCookieOptions } from "./_core/cookies";
+import { systemRouter } from "./_core/systemRouter";
+import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import {
+  addBucketItem,
+  createUser,
+  deleteBucketItem,
+  getBucketItems,
+  getBucketStats,
+  getCommunityGoalsPage,
+  getLeaderboard,
+  getUserByEmail,
+  getUserSettings,
+  reorderBucketItems,
+  seedGlobalGoals,
+  toggleBucketItemAchieved,
+  updateUserLastSignedIn,
+  updateBucketItem,
+  upsertUserSettings,
+  getTopGoals,
+  getTopUsers,
+} from "./db";
+import { attachSessionCookie, createSessionToken } from "./_core/auth";
+
+function toClientUser(user: {
+  id: number;
+  email: string;
+  name: string | null;
+  role: "user" | "admin";
+  createdAt: Date;
+  updatedAt: Date;
+  lastSignedIn: Date;
+}) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    lastSignedIn: user.lastSignedIn,
+  };
+}
+
+export const appRouter = router({
+  system: systemRouter,
+
+  auth: router({
+    me: publicProcedure.query((opts) => (opts.ctx.user ? toClientUser(opts.ctx.user) : null)),
+
+    register: publicProcedure
+      .input(
+        z.object({
+          email: z.string().trim().email().max(320),
+          password: z.string().min(8).max(128),
+          name: z.string().trim().max(120).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const email = input.email.trim().toLowerCase();
+        const existingUser = await getUserByEmail(email);
+
+        if (existingUser) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Account with this email already exists",
+          });
+        }
+
+        const passwordHash = await hash(input.password, 12);
+        const user = await createUser({
+          email,
+          passwordHash,
+          name: input.name?.trim() || null,
+        });
+
+        const token = await createSessionToken(user);
+        attachSessionCookie(ctx.req, ctx.res, token);
+        return toClientUser(user);
+      }),
+
+    login: publicProcedure
+      .input(
+        z.object({
+          email: z.string().trim().email().max(320),
+          password: z.string().min(1).max(128),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const email = input.email.trim().toLowerCase();
+        const user = await getUserByEmail(email);
+        if (!user) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+        }
+
+        const passwordMatches = await compare(input.password, user.passwordHash);
+        if (!passwordMatches) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+        }
+
+        await updateUserLastSignedIn(user.id);
+        const token = await createSessionToken(user);
+        attachSessionCookie(ctx.req, ctx.res, token);
+        return toClientUser(user);
+      }),
+
+    logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return { success: true } as const;
+    }),
+  }),
+
+  // ─── Bucket List ─────────────────────────────────────────────────
+  bucketList: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return getBucketItems(ctx.user.id);
+    }),
+
+    add: protectedProcedure
+      .input(
+        z.object({
+          title: z.string().trim().min(3).max(120),
+          description: z.string().max(1000).optional(),
+          category: z.string().max(64).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return addBucketItem(ctx.user.id, input);
+      }),
+
+    update: protectedProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          title: z.string().trim().min(3).max(120).optional(),
+          description: z.string().max(1000).optional(),
+          category: z.string().max(64).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        return updateBucketItem(ctx.user.id, id, data);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await deleteBucketItem(ctx.user.id, input.id);
+        return { success: true };
+      }),
+
+    toggleAchieved: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        return toggleBucketItemAchieved(ctx.user.id, input.id);
+      }),
+
+    reorder: protectedProcedure
+      .input(z.object({ orderedIds: z.array(z.number()) }))
+      .mutation(async ({ ctx, input }) => {
+        await reorderBucketItems(ctx.user.id, input.orderedIds);
+        return { success: true };
+      }),
+
+    stats: protectedProcedure.query(async ({ ctx }) => {
+      return getBucketStats(ctx.user.id);
+    }),
+  }),
+
+  // ─── Leaderboard ─────────────────────────────────────────────────
+  leaderboard: router({
+    top100: publicProcedure.query(async () => {
+      return getLeaderboard(100);
+    }),
+
+    topGoals: publicProcedure.query(async () => {
+      return getTopGoals(100);
+    }),
+
+    topUsers: publicProcedure.query(async () => {
+      return getTopUsers(100);
+    }),
+  }),
+
+  // ─── Global Goals ─────────────────────────────────────────────────
+  globalGoals: router({
+    list: publicProcedure
+      .input(
+        z.object({
+          page: z.number().int().min(1).default(1),
+          pageSize: z.number().int().min(1).max(50).default(10),
+          category: z.string().max(64).optional(),
+          excludeMine: z.boolean().default(false),
+        }).optional()
+      )
+      .query(async ({ ctx, input }) => {
+        await seedGlobalGoals();
+        const page = input?.page ?? 1;
+        const pageSize = input?.pageSize ?? 10;
+        const category = input?.category;
+        const excludeUserId = input?.excludeMine && ctx.user ? ctx.user.id : undefined;
+
+        const result = await getCommunityGoalsPage({
+          page,
+          pageSize,
+          category,
+          excludeUserId,
+          publicOnly: true,
+        });
+
+        return {
+          items: result.items,
+          total: result.total,
+          page,
+          pageSize,
+          totalPages: Math.max(1, Math.ceil(result.total / pageSize)),
+        };
+      }),
+  }),
+
+  // ─── User Settings ────────────────────────────────────────────────
+  settings: router({
+    get: protectedProcedure.query(async ({ ctx }) => {
+      return getUserSettings(ctx.user.id);
+    }),
+
+    update: protectedProcedure
+      .input(
+        z.object({
+          displayName: z.string().max(128).optional(),
+          bio: z.string().max(500).optional(),
+          avatarEmoji: z.string().max(8).optional(),
+          isPublic: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return upsertUserSettings(ctx.user.id, input);
+      }),
+  }),
+});
+
+export type AppRouter = typeof appRouter;
