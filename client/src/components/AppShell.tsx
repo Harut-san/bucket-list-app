@@ -24,10 +24,41 @@ interface ProgressBadgeProps {
   total: number;
   achieved: number;
   rank?: number | null;
+  compact?: boolean;
 }
 
-function ProgressBadge({ total, achieved, rank }: ProgressBadgeProps) {
+function ProgressBadge({ total, achieved, rank, compact = false }: ProgressBadgeProps) {
   const pct = total > 0 ? Math.round((achieved / total) * 100) : 0;
+
+  if (compact) {
+    return (
+      <div className="sketch-border px-2.5 py-2 bg-background/80">
+        <div className="flex items-end justify-between gap-4">
+          <div className="flex flex-col">
+            <span className="text-xs opacity-60" style={{ fontFamily: "'Courier Prime', monospace" }}>progress</span>
+            <span className="text-2xl font-bold leading-none" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>
+              {pct}%
+            </span>
+          </div>
+          {rank != null && (
+            <div className="flex flex-col text-right">
+              <span className="text-xs opacity-60" style={{ fontFamily: "'Courier Prime', monospace" }}>rank</span>
+              <span className="text-2xl font-bold leading-none" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>
+                #{rank}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="sketch-progress mt-2">
+          <div className="sketch-progress-fill" style={{ width: `${pct}%` }} />
+        </div>
+        <span className="text-xs opacity-60 mt-1 block" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          {achieved}/{total} goals
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="sketch-border px-3 h-16 flex items-center gap-3 bg-background/80">
       <div className="flex flex-col items-center">
@@ -280,9 +311,9 @@ export default function AppShell({ children }: AppShellProps) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.98 }}
                 transition={{ duration: 0.16 }}
-                className="md:hidden absolute right-0 top-[calc(100%+0.4rem)] z-[120] w-1/2 overflow-visible"
+                className="md:hidden absolute right-2 top-[calc(100%+0.02rem)] z-[120] w-[70%] overflow-visible"
               >
-                <div className="sketch-border mt-2 p-2 bg-[oklch(0.97_0.018_82)]">
+                <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)]">
                   <div className="px-3 py-2">
                     <p
                       className="text-base leading-none truncate"
@@ -300,7 +331,7 @@ export default function AppShell({ children }: AppShellProps) {
                   <div className="pencil-line my-1" />
                   {stats && (
                     <div className="px-2 pb-2">
-                      <ProgressBadge total={stats.total} achieved={stats.achieved} rank={stats.rank} />
+                      <ProgressBadge total={stats.total} achieved={stats.achieved} rank={stats.rank} compact />
                     </div>
                   )}
                   {appNavItems.map((item) => (

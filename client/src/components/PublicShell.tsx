@@ -142,9 +142,9 @@ export default function PublicShell({ children }: PublicShellProps) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.98 }}
                 transition={{ duration: 0.16 }}
-                className="md:hidden absolute right-0 top-[calc(100%+0.4rem)] z-[120] w-1/2 overflow-visible"
+                className="md:hidden absolute right-2 top-[calc(100%+0.02rem)] z-[120] w-[70%] overflow-visible"
               >
-                <div className="sketch-border mt-2 p-2 bg-[oklch(0.97_0.018_82)]">
+                <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)]">
                   {publicNavItems.map((item) => (
                     <Link key={item.href} href={item.href}>
                       <span
