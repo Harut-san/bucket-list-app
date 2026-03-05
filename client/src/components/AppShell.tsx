@@ -2,7 +2,6 @@ import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import {
-  Menu,
   X,
   LogOut,
   Settings,
@@ -117,6 +116,7 @@ export default function AppShell({ children }: AppShellProps) {
   const [rankInsightsOpen, setRankInsightsOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const creditsRef = useRef<HTMLDivElement | null>(null);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const { user, logout } = useAuth();
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => {
@@ -188,6 +188,22 @@ export default function AppShell({ children }: AppShellProps) {
       document.removeEventListener("touchstart", closeIfOutside);
     };
   }, [creditsOpen]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeIfOutside = (event: MouseEvent | TouchEvent) => {
+      if (!mobileMenuRef.current) return;
+      if (!mobileMenuRef.current.contains(event.target as Node)) {
+        setMobileOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", closeIfOutside);
+    document.addEventListener("touchstart", closeIfOutside);
+    return () => {
+      document.removeEventListener("mousedown", closeIfOutside);
+      document.removeEventListener("touchstart", closeIfOutside);
+    };
+  }, [mobileOpen]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -315,12 +331,88 @@ export default function AppShell({ children }: AppShellProps) {
             </div>
 
             {/* Mobile menu button */}
-            <button
-              className="md:hidden sketch-button p-2 bg-background mt-1"
-              onClick={() => setMobileOpen(!mobileOpen)}
-            >
-              {mobileOpen ? <X size={18} /> : <Menu size={18} />}
-            </button>
+            <div className="md:hidden relative" ref={mobileMenuRef}>
+              <button
+                className={`sketch-button p-2 bg-background mt-1 hamburger-button ${mobileOpen ? "open" : ""}`}
+                onClick={() => setMobileOpen((open) => !open)}
+                aria-label="Toggle menu"
+              >
+                <span className="hamburger-line" />
+                <span className="hamburger-line" />
+                <span className="hamburger-line" />
+              </button>
+
+              <AnimatePresence>
+                {mobileOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                    transition={{ duration: 0.14 }}
+                    className="absolute right-0 top-[calc(100%+0.5rem)] z-[220] w-[18rem] max-w-[90vw]"
+                  >
+                    <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)]">
+                      <div className="px-3 py-2">
+                        <p className="text-base leading-none truncate" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>
+                          {displayName}
+                        </p>
+                        <p className="text-xs mt-1 opacity-60 truncate" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                          {user?.email}
+                        </p>
+                      </div>
+                      <div className="pencil-line my-1" />
+                      {stats && (
+                        <div className="px-2 pb-2">
+                          <ProgressBadge total={stats.total} achieved={stats.achieved} rank={stats.rank} compact />
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        {appNavItems.map((item) => (
+                          <Link key={item.href} href={item.href}>
+                            <button
+                              type="button"
+                              className={`w-full sketch-button text-left px-3 py-2 ${
+                                location === item.href ? "bg-foreground text-background border-foreground" : "text-foreground bg-background"
+                              }`}
+                              onClick={() => setMobileOpen(false)}
+                              style={{ fontFamily: "'Space Mono', monospace" }}
+                            >
+                              {item.label}
+                            </button>
+                          </Link>
+                        ))}
+                      </div>
+                      <div className="pencil-line my-2" />
+                      <div className="space-y-1 pt-1">
+                        <Link href="/app/settings">
+                          <button
+                            type="button"
+                            onClick={() => setMobileOpen(false)}
+                            className="w-full sketch-button text-left px-3 py-2 transition-colors flex items-center gap-2 bg-background"
+                            style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
+                          >
+                            <Settings size={15} />
+                            Settings
+                          </button>
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMobileOpen(false);
+                            logoutMutation.mutate();
+                          }}
+                          className="w-full sketch-button text-left px-3 py-2 text-destructive transition-colors flex items-center gap-2 bg-background hover:bg-destructive/10"
+                          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
+                        >
+                          <LogOut size={15} />
+                          Log out
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* Desktop nav */}
@@ -340,105 +432,6 @@ export default function AppShell({ children }: AppShellProps) {
               </Link>
             ))}
           </nav>
-
-          {/* Mobile nav */}
-          <AnimatePresence>
-            {mobileOpen && (
-              <>
-                <motion.button
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.14 }}
-                  className="md:hidden fixed inset-0 z-[200] bg-[oklch(0.18_0.02_60_/_0.38)]"
-                  onClick={() => setMobileOpen(false)}
-                  aria-label="Close menu overlay"
-                />
-                <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                  transition={{ duration: 0.16 }}
-                  className="md:hidden fixed right-4 top-6 z-[210] w-[17rem] max-w-[92vw] overflow-visible"
-                >
-                  <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)]">
-                    <div className="flex justify-end mb-1">
-                      <button
-                        type="button"
-                        onClick={() => setMobileOpen(false)}
-                        className="sketch-button h-9 w-9 p-0 bg-background flex items-center justify-center leading-none"
-                        aria-label="Close menu"
-                      >
-                        <X size={17} />
-                      </button>
-                    </div>
-                  <div className="px-3 py-2">
-                    <p
-                      className="text-base leading-none truncate"
-                      style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
-                    >
-                      {displayName}
-                    </p>
-                    <p
-                      className="text-xs mt-1 opacity-60 truncate"
-                      style={{ fontFamily: "'Courier Prime', monospace" }}
-                    >
-                      {user?.email}
-                    </p>
-                  </div>
-                  <div className="pencil-line my-1" />
-                  {stats && (
-                    <div className="px-2 pb-2">
-                      <ProgressBadge total={stats.total} achieved={stats.achieved} rank={stats.rank} compact />
-                    </div>
-                  )}
-                  <div className="space-y-4">
-                    {appNavItems.map((item) => (
-                    <Link key={item.href} href={item.href}>
-                      <button
-                        type="button"
-                        className={`w-full sketch-button text-left px-3 py-2 ${
-                          location === item.href ? "active" : "text-muted-foreground bg-background"
-                        }`}
-                        onClick={() => setMobileOpen(false)}
-                        style={{ fontFamily: "'Space Mono', monospace" }}
-                      >
-                        {item.label}
-                      </button>
-                    </Link>
-                    ))}
-                  </div>
-                  <div className="pencil-line my-2" />
-                  <div className="space-y-2 pt-1">
-                    <Link href="/app/settings">
-                      <button
-                        type="button"
-                        onClick={() => setMobileOpen(false)}
-                        className="w-full sketch-button text-left px-3 py-2 transition-colors flex items-center gap-2 bg-background hover:bg-muted"
-                        style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.05rem", fontWeight: 700 }}
-                      >
-                        <Settings size={15} />
-                        Settings
-                      </button>
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMobileOpen(false);
-                        logoutMutation.mutate();
-                      }}
-                      className="w-full sketch-button text-left px-3 py-2 text-destructive transition-colors flex items-center gap-2 bg-background hover:bg-destructive/10"
-                      style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.05rem", fontWeight: 700 }}
-                    >
-                      <LogOut size={15} />
-                      Log out
-                    </button>
-                  </div>
-                </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
 
           <div className="pencil-line mt-5" />
         </div>

@@ -3,6 +3,13 @@ import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { normalizeAvatarEmoji } from "@shared/const";
+import GoalPreviewModal from "@/components/GoalPreviewModal";
+import {
+  QUIZ_QUESTIONS,
+  buildQuizResult,
+  type QuizAnswerMap,
+  type QuizResult,
+} from "@/lib/quiz/personalityQuiz";
 import { motion } from "framer-motion";
 import {
   DndContext,
@@ -49,6 +56,15 @@ type BucketItem = {
   achievedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+};
+
+type GoalPreviewState = {
+  title: string;
+  category?: string | null;
+  description?: string | null;
+  subtitle?: string | null;
+  meta?: string | null;
+  accentColor?: string;
 };
 
 // ─── Category options ─────────────────────────────────────────────
@@ -197,91 +213,22 @@ async function renderGoalsSnapshot(options: {
   });
 }
 
-type QuizAnswers = {
-  vibe: "travel" | "creative" | "adrenaline" | null;
-  style: "solo" | "social" | "challenge" | null;
-  pace: "quick" | "medium" | "long" | null;
-};
-
-type QuizSuggestion = {
-  title: string;
-  category: string;
-};
-
-function buildQuizSuggestions(answers: QuizAnswers): QuizSuggestion[] {
-  const byVibe: Record<NonNullable<QuizAnswers["vibe"]>, QuizSuggestion[]> = {
-    travel: [
-      { title: "Visit 3 European cities", category: "Travel" },
-      { title: "Take a sunrise train trip", category: "Travel" },
-      { title: "Spend a week in a new country", category: "Adventure" },
-    ],
-    creative: [
-      { title: "Ship a tiny personal website", category: "Creative" },
-      { title: "Learn street photography basics", category: "Skills" },
-      { title: "Create a 30-day sketch challenge", category: "Creative" },
-    ],
-    adrenaline: [
-      { title: "Try indoor climbing", category: "Adventure" },
-      { title: "Run your first 10K race", category: "Fitness" },
-      { title: "Do a mountain trail weekend", category: "Adventure" },
-    ],
-  };
-
-  const byStyle: Record<NonNullable<QuizAnswers["style"]>, QuizSuggestion[]> = {
-    solo: [
-      { title: "Take yourself on a solo date day", category: "Personal" },
-      { title: "Read 12 books in a year", category: "Learning" },
-    ],
-    social: [
-      { title: "Host a themed dinner night", category: "Food" },
-      { title: "Plan a group road trip", category: "Travel" },
-    ],
-    challenge: [
-      { title: "Learn 100 new words in a language", category: "Learning" },
-      { title: "Build a 90-day habit streak", category: "Personal" },
-    ],
-  };
-
-  const byPace: Record<NonNullable<QuizAnswers["pace"]>, QuizSuggestion[]> = {
-    quick: [
-      { title: "Try one new hobby this month", category: "Skills" },
-      { title: "Visit one museum this weekend", category: "Learning" },
-    ],
-    medium: [
-      { title: "Complete a 6-week fitness plan", category: "Fitness" },
-      { title: "Take a short online course", category: "Career" },
-    ],
-    long: [
-      { title: "Save for a dream trip", category: "Travel" },
-      { title: "Volunteer in a community project", category: "Service" },
-    ],
-  };
-
-  const combined = [
-    ...byVibe[(answers.vibe ?? "travel") as NonNullable<QuizAnswers["vibe"]>],
-    ...byStyle[(answers.style ?? "solo") as NonNullable<QuizAnswers["style"]>],
-    ...byPace[(answers.pace ?? "quick") as NonNullable<QuizAnswers["pace"]>],
-  ];
-
-  const deduped = new Map<string, QuizSuggestion>();
-  for (const suggestion of combined) {
-    deduped.set(suggestion.title.toLowerCase(), suggestion);
-  }
-  return Array.from(deduped.values()).slice(0, 6);
-}
 
 // ─── Goal Form Modal ──────────────────────────────────────────────
 interface GoalFormProps {
   initial?: Partial<BucketItem>;
   onSave: (data: { title: string; description?: string; category?: string }) => void;
   onCancel: () => void;
+  onDelete?: (() => void) | null;
+  deleting?: boolean;
   saving?: boolean;
 }
 
-function GoalForm({ initial, onSave, onCancel, saving }: GoalFormProps) {
+function GoalForm({ initial, onSave, onCancel, onDelete = null, deleting = false, saving }: GoalFormProps) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [category, setCategory] = useState(initial?.category ?? "");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -309,8 +256,9 @@ function GoalForm({ initial, onSave, onCancel, saving }: GoalFormProps) {
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4"
       style={{ background: "oklch(0.18 0.02 60 / 0.5)" }}
+      onClick={onCancel}
     >
-      <div className="sketch-card w-full max-w-md p-6 relative">
+      <div className="sketch-card w-full max-w-md p-6 relative" onClick={(event) => event.stopPropagation()}>
         <div className="tape" />
         <h3
           className="text-2xl font-bold mb-4 pt-2"
@@ -369,7 +317,28 @@ function GoalForm({ initial, onSave, onCancel, saving }: GoalFormProps) {
 
           <div className="pencil-line" />
 
-          <div className="flex gap-3 justify-end">
+          <div className="flex gap-3 justify-between items-center flex-wrap">
+            {initial?.id && onDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmDelete) {
+                    onDelete();
+                    return;
+                  }
+                  setConfirmDelete(true);
+                }}
+                disabled={deleting}
+                className={`sketch-button px-4 py-2 text-sm ${
+                  confirmDelete
+                    ? "bg-destructive text-background border-destructive"
+                    : "bg-background text-destructive border-destructive"
+                } disabled:opacity-60`}
+              >
+                {deleting ? "Deleting..." : confirmDelete ? "Confirm delete" : "Delete goal"}
+              </button>
+            )}
+            <div className="flex gap-3 justify-end ml-auto">
             <button
               type="button"
               onClick={onCancel}
@@ -385,109 +354,9 @@ function GoalForm({ initial, onSave, onCancel, saving }: GoalFormProps) {
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
               {initial?.id ? "Save changes" : "Add goal"}
             </button>
+            </div>
           </div>
         </form>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-interface GoalDetailsModalProps {
-  item: BucketItem;
-  onClose: () => void;
-  onEdit: (item: BucketItem) => void;
-  onDelete: (id: number) => void;
-}
-
-function GoalDetailsModal({ item, onClose, onEdit, onDelete }: GoalDetailsModalProps) {
-  const color = item.category ? (CATEGORY_COLORS[item.category] ?? "oklch(0.55 0.04 70)") : undefined;
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      style={{ background: "oklch(0.18 0.02 60 / 0.5)" }}
-      onClick={onClose}
-    >
-      <div className="sketch-card w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-3 right-3 p-1.5 rounded hover:bg-muted transition-colors"
-          aria-label="Close details"
-        >
-          <X size={16} />
-        </button>
-
-        <h3
-          className="text-2xl font-bold mb-2 pr-8 break-words"
-          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}
-        >
-          {item.title}
-        </h3>
-
-        <div className="flex items-center gap-2 flex-wrap mb-4">
-          {item.category && (
-            <span className="category-badge" style={{ borderColor: color, color }}>
-              {item.category}
-            </span>
-          )}
-          {item.achieved && item.achievedAt && (
-            <span className="text-xs opacity-60" style={{ fontFamily: "'Courier Prime', monospace" }}>
-              ✓ achieved on {new Date(item.achievedAt).toLocaleDateString()}
-            </span>
-          )}
-        </div>
-
-        <div className="sketch-border-dashed p-4 bg-background/60">
-          <p className="text-xs text-muted-foreground mb-1" style={{ fontFamily: "'Courier Prime', monospace" }}>
-            Description
-          </p>
-          <p className="text-sm whitespace-pre-wrap break-words" style={{ fontFamily: "'Courier Prime', monospace" }}>
-            {item.description?.trim() ? item.description : "No description provided."}
-          </p>
-        </div>
-
-        <div className="pencil-line my-4" />
-
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <button
-            type="button"
-            onClick={() => {
-              if (confirmDelete) {
-                onDelete(item.id);
-                onClose();
-                return;
-              }
-              setConfirmDelete(true);
-            }}
-            className={`sketch-button px-4 py-2 text-sm ${confirmDelete ? "bg-destructive text-background border-destructive" : "bg-background text-destructive border-destructive"}`}
-          >
-            {confirmDelete ? "Confirm delete" : "Delete"}
-          </button>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={onClose} className="sketch-button px-4 py-2 bg-background text-sm">
-              Close
-            </button>
-            <button
-              type="button"
-              onClick={() => onEdit(item)}
-              className="sketch-button px-4 py-2 bg-foreground text-background text-sm flex items-center gap-2"
-            >
-              <Pencil size={14} />
-              Edit goal
-            </button>
-          </div>
-        </div>
       </div>
     </div>,
     document.body
@@ -583,14 +452,14 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
       {/* Content */}
       <div className="flex-1 min-w-0 pl-1">
         <p
-          className={`font-semibold leading-tight truncate ${item.achieved ? "line-through opacity-60" : ""}`}
+          className={`font-semibold leading-tight line-clamp-2 text-[0.98rem] md:text-[1.08rem] ${item.achieved ? "line-through opacity-60" : ""}`}
           title={item.title}
-          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em", fontSize: "1.15rem" }}
+          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.035em" }}
         >
           {item.title}
         </p>
         {item.description && (
-          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          <p className="text-[11px] md:text-xs text-muted-foreground mt-0.5 line-clamp-2" style={{ fontFamily: "'Courier Prime', monospace" }}>
             {item.description}
           </p>
         )}
@@ -657,19 +526,16 @@ export default function MyBucketList() {
 
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<BucketItem | null>(null);
-  const [viewItem, setViewItem] = useState<BucketItem | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [quickShareCopied, setQuickShareCopied] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
-  const [quizAnswers, setQuizAnswers] = useState<QuizAnswers>({
-    vibe: null,
-    style: null,
-    pace: null,
-  });
-  const [quizSuggestions, setQuizSuggestions] = useState<QuizSuggestion[]>([]);
+  const [quizStep, setQuizStep] = useState(0);
+  const [quizAnswers, setQuizAnswers] = useState<QuizAnswerMap>({});
+  const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
   const [addingQuizSuggestions, setAddingQuizSuggestions] = useState(false);
+  const [goalPreview, setGoalPreview] = useState<GoalPreviewState | null>(null);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [dragOverlayWidth, setDragOverlayWidth] = useState<number | null>(null);
   const displayItems = selectedCategory
@@ -857,23 +723,33 @@ export default function MyBucketList() {
     setShareOpen(true);
   };
 
-  const handleGenerateQuizSuggestions = () => {
-    if (!quizAnswers.vibe || !quizAnswers.style || !quizAnswers.pace) {
-      toast.error("Answer all 3 questions first");
+  const handleQuizClose = useCallback(() => {
+    setQuizOpen(false);
+    setQuizStep(0);
+    setQuizAnswers({});
+    setQuizResult(null);
+  }, []);
+
+  const handleQuizAnswer = (choice: "A" | "B") => {
+    const question = QUIZ_QUESTIONS[quizStep];
+    if (!question) return;
+    const nextAnswers = { ...quizAnswers, [question.id]: choice };
+    setQuizAnswers(nextAnswers);
+    if (quizStep === QUIZ_QUESTIONS.length - 1) {
+      setQuizResult(buildQuizResult(nextAnswers));
       return;
     }
-    setQuizSuggestions(buildQuizSuggestions(quizAnswers));
+    setQuizStep((prev) => prev + 1);
   };
 
   const handleAddQuizSuggestions = async () => {
-    if (quizSuggestions.length === 0) return;
+    if (!quizResult || quizResult.bucket_list.length === 0) return;
     setAddingQuizSuggestions(true);
     try {
       const results = await Promise.allSettled(
-        quizSuggestions.map((goal) =>
+        quizResult.bucket_list.map((title) =>
           addGoalSilently.mutateAsync({
-            title: goal.title,
-            category: goal.category,
+            title,
           })
         )
       );
@@ -883,12 +759,10 @@ export default function MyBucketList() {
         await utils.bucketList.stats.invalidate();
         toast.success(`${successCount} goals added`);
       }
-      if (successCount !== quizSuggestions.length) {
+      if (successCount !== quizResult.bucket_list.length) {
         toast.error("Some goals failed to add");
       }
-      setQuizOpen(false);
-      setQuizSuggestions([]);
-      setQuizAnswers({ vibe: null, style: null, pace: null });
+      handleQuizClose();
     } finally {
       setAddingQuizSuggestions(false);
     }
@@ -1061,7 +935,7 @@ export default function MyBucketList() {
           </p>
           <button
             onClick={() => setShowForm(true)}
-            className="sketch-button px-6 py-2 bg-foreground text-background"
+            className="sketch-button px-6 py-2 bg-foreground text-background whitespace-nowrap"
           >
             Add your first goal -&gt;
           </button>
@@ -1091,10 +965,19 @@ export default function MyBucketList() {
                 item={item}
                 onToggle={handleToggleGoal}
                 onEdit={(item) => {
-                  setViewItem(null);
                   setEditItem(item);
                 }}
-                onOpen={(item) => setViewItem(item)}
+                onOpen={(item) =>
+                  setGoalPreview({
+                    title: item.title,
+                    category: item.category,
+                    description: item.description,
+                    subtitle: item.achieved
+                      ? `Achieved ${item.achievedAt ? new Date(item.achievedAt).toLocaleDateString() : ""}`.trim()
+                      : "In progress",
+                    accentColor: item.category ? CATEGORY_COLORS[item.category] : undefined,
+                  })
+                }
                 onDelete={(id) => deleteMutation.mutate({ id })}
               />
             ))}
@@ -1116,10 +999,19 @@ export default function MyBucketList() {
                   item={item}
                   onToggle={handleToggleGoal}
                   onEdit={(item) => {
-                    setViewItem(null);
                     setEditItem(item);
                   }}
-                  onOpen={(item) => setViewItem(item)}
+                  onOpen={(item) =>
+                    setGoalPreview({
+                      title: item.title,
+                      category: item.category,
+                      description: item.description,
+                      subtitle: item.achieved
+                        ? `Achieved ${item.achievedAt ? new Date(item.achievedAt).toLocaleDateString() : ""}`.trim()
+                        : "In progress",
+                      accentColor: item.category ? CATEGORY_COLORS[item.category] : undefined,
+                    })
+                  }
                   onDelete={(id) => deleteMutation.mutate({ id })}
                 />
               ))}
@@ -1194,25 +1086,17 @@ export default function MyBucketList() {
         />
       )}
 
-      {/* Goal details modal */}
-      {viewItem && (
-        <GoalDetailsModal
-          item={viewItem}
-          onClose={() => setViewItem(null)}
-          onEdit={(item) => {
-            setViewItem(null);
-            setEditItem(item);
-          }}
-          onDelete={(id) => deleteMutation.mutate({ id })}
-        />
-      )}
-
       {/* Edit form modal */}
       {editItem && (
         <GoalForm
           initial={editItem}
           onSave={(data) => updateMutation.mutate({ id: editItem.id, ...data })}
           onCancel={() => setEditItem(null)}
+          onDelete={() => {
+            deleteMutation.mutate({ id: editItem.id });
+            setEditItem(null);
+          }}
+          deleting={deleteMutation.isPending}
           saving={updateMutation.isPending}
         />
       )}
@@ -1221,99 +1105,95 @@ export default function MyBucketList() {
           <div
             className="fixed inset-0 z-[140] flex items-center justify-center p-4"
             style={{ background: "oklch(0.18 0.02 60 / 0.55)" }}
-            onClick={() => {
-              setQuizOpen(false);
-              setQuizSuggestions([]);
-            }}
+            onClick={handleQuizClose}
           >
             <div className="sketch-card w-full max-w-lg p-4" onClick={(event) => event.stopPropagation()}>
               <div className="flex items-center justify-between mb-2">
                 <h3 style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.04em", fontSize: "1.25rem" }}>
-                  Bucket List Quiz
+                  Personality Quiz
                 </h3>
                 <button
                   type="button"
-                  onClick={() => {
-                    setQuizOpen(false);
-                    setQuizSuggestions([]);
-                  }}
+                  onClick={handleQuizClose}
                   className="sketch-button h-9 w-9 p-0 bg-background flex items-center justify-center leading-none"
                   aria-label="Close quiz"
                 >
                   <X size={17} />
                 </button>
               </div>
-              {!quizSuggestions.length ? (
+              {!quizResult ? (
                 <div className="space-y-3">
-                  <label className="block text-xs" style={{ fontFamily: "'Courier Prime', monospace" }}>
-                    1) What vibe fits you best?
-                    <select
-                      className="sketch-input w-full px-3 py-2 text-sm mt-1"
-                      value={quizAnswers.vibe ?? ""}
-                      onChange={(event) => setQuizAnswers((prev) => ({ ...prev, vibe: event.target.value as QuizAnswers["vibe"] }))}
+                  <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                    Step {quizStep + 1}/{QUIZ_QUESTIONS.length}
+                  </p>
+                  <div className="sketch-border-dashed p-3 bg-background/60">
+                    <p style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>
+                      {QUIZ_QUESTIONS[quizStep]?.text}
+                    </p>
+                  </div>
+                  <div className="grid gap-2">
+                    {QUIZ_QUESTIONS[quizStep]?.answers.map((answer) => (
+                      <button
+                        key={answer.key}
+                        type="button"
+                        onClick={() => handleQuizAnswer(answer.key)}
+                        className="w-full sketch-button px-3 py-3 bg-background text-left"
+                        style={{ fontFamily: "'Courier Prime', monospace" }}
+                      >
+                        <span className="font-bold mr-2" style={{ fontFamily: "'Space Mono', monospace" }}>
+                          {answer.key}:
+                        </span>
+                        {answer.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setQuizStep((prev) => Math.max(0, prev - 1))}
+                      className="sketch-button px-3 py-2 bg-background disabled:opacity-50"
+                      disabled={quizStep === 0}
                     >
-                      <option value="">- select -</option>
-                      <option value="travel">Travel explorer</option>
-                      <option value="creative">Creative builder</option>
-                      <option value="adrenaline">Adrenaline seeker</option>
-                    </select>
-                  </label>
-                  <label className="block text-xs" style={{ fontFamily: "'Courier Prime', monospace" }}>
-                    2) How do you like goals?
-                    <select
-                      className="sketch-input w-full px-3 py-2 text-sm mt-1"
-                      value={quizAnswers.style ?? ""}
-                      onChange={(event) => setQuizAnswers((prev) => ({ ...prev, style: event.target.value as QuizAnswers["style"] }))}
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleQuizClose}
+                      className="sketch-button px-3 py-2 bg-background"
                     >
-                      <option value="">- select -</option>
-                      <option value="solo">Solo mode</option>
-                      <option value="social">With friends</option>
-                      <option value="challenge">Hard challenge</option>
-                    </select>
-                  </label>
-                  <label className="block text-xs" style={{ fontFamily: "'Courier Prime', monospace" }}>
-                    3) Time horizon?
-                    <select
-                      className="sketch-input w-full px-3 py-2 text-sm mt-1"
-                      value={quizAnswers.pace ?? ""}
-                      onChange={(event) => setQuizAnswers((prev) => ({ ...prev, pace: event.target.value as QuizAnswers["pace"] }))}
-                    >
-                      <option value="">- select -</option>
-                      <option value="quick">This month</option>
-                      <option value="medium">This year</option>
-                      <option value="long">Long game</option>
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleGenerateQuizSuggestions}
-                    className="sketch-button px-4 py-2 bg-foreground text-background"
-                  >
-                    Generate 6 goals
-                  </button>
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div>
-                  <p className="text-sm mb-3" style={{ fontFamily: "'Courier Prime', monospace" }}>
-                    We picked 6 suggestions. Add them to your list?
+                  <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                    Type: {quizResult.personality_type} · Cluster: {quizResult.cluster}
                   </p>
+                  <p className="text-sm mb-3 mt-2" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                    {quizResult.description}
+                  </p>
+                  <pre className="sketch-border-dashed bg-background/70 p-2 text-[11px] overflow-x-auto mb-3" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                    {JSON.stringify(quizResult, null, 2)}
+                  </pre>
                   <div className="space-y-2 mb-4">
-                    {quizSuggestions.map((goal) => (
-                      <div key={goal.title} className="sketch-border px-3 py-2 bg-background/70">
-                        <p style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>{goal.title}</p>
-                        <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
-                          Category: {goal.category}
-                        </p>
+                    {quizResult.bucket_list.map((goal) => (
+                      <div key={goal} className="sketch-border px-3 py-2 bg-background/70">
+                        <p style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>{goal}</p>
                       </div>
                     ))}
                   </div>
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
-                      onClick={() => setQuizSuggestions([])}
+                      onClick={() => {
+                        setQuizResult(null);
+                        setQuizStep(0);
+                        setQuizAnswers({});
+                      }}
                       className="sketch-button px-4 py-2 bg-background"
                     >
-                      Back
+                      Retake
                     </button>
                     <button
                       type="button"
@@ -1330,6 +1210,16 @@ export default function MyBucketList() {
           </div>,
           document.body
         )}
+      <GoalPreviewModal
+        open={!!goalPreview}
+        onClose={() => setGoalPreview(null)}
+        title={goalPreview?.title ?? ""}
+        category={goalPreview?.category}
+        description={goalPreview?.description}
+        subtitle={goalPreview?.subtitle}
+        meta={goalPreview?.meta}
+        accentColor={goalPreview?.accentColor}
+      />
       {shareOpen &&
         createPortal(
           <div

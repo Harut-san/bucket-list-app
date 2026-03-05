@@ -1,12 +1,15 @@
 import { trpc } from "@/lib/trpc";
 import { Loader2 } from "lucide-react";
+import { useState } from "react";
 import UserAvatar from "@/components/UserAvatar";
+import GoalPreviewModal from "@/components/GoalPreviewModal";
 
 interface ShareProfileProps {
   userId: number;
 }
 
 export default function ShareProfile({ userId }: ShareProfileProps) {
+  const [previewGoal, setPreviewGoal] = useState<{ title: string; category?: string | null; achieved: boolean } | null>(null);
   const { data, isLoading } = trpc.share.profile.useQuery(
     { userId },
     { enabled: Number.isFinite(userId) && userId > 0 }
@@ -36,8 +39,9 @@ export default function ShareProfile({ userId }: ShareProfileProps) {
 
   const search = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const categoryFilter = search?.get("category")?.trim() || null;
-  const yearFilter = Number(search?.get("year") ?? "");
-  const hasYearFilter = Number.isFinite(yearFilter);
+  const rawYear = search?.get("year");
+  const yearFilter = rawYear && /^\d{4}$/.test(rawYear) ? Number(rawYear) : null;
+  const hasYearFilter = yearFilter !== null;
   const filteredGoals = data.goals.filter((goal) => {
     const categoryMatches = categoryFilter ? goal.category === categoryFilter : true;
     const yearMatches = hasYearFilter ? new Date(goal.createdAt).getFullYear() === yearFilter : true;
@@ -75,9 +79,13 @@ export default function ShareProfile({ userId }: ShareProfileProps) {
       ) : (
         <div className="flex flex-col gap-2">
           {filteredGoals.map((goal) => (
-            <div key={goal.id} className="sketch-border p-3 bg-background/60">
+            <div
+              key={goal.id}
+              className="sketch-border p-3 bg-background/60"
+              onClick={() => setPreviewGoal({ title: goal.title, category: goal.category, achieved: goal.achieved })}
+            >
               <p
-                className={`font-semibold ${goal.achieved ? "line-through opacity-70" : ""}`}
+                className={`font-semibold line-clamp-2 text-[0.98rem] md:text-base ${goal.achieved ? "line-through opacity-70" : ""}`}
                 style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
               >
                 {goal.title}
@@ -89,6 +97,13 @@ export default function ShareProfile({ userId }: ShareProfileProps) {
           ))}
         </div>
       )}
+      <GoalPreviewModal
+        open={!!previewGoal}
+        onClose={() => setPreviewGoal(null)}
+        title={previewGoal?.title ?? ""}
+        category={previewGoal?.category}
+        subtitle={previewGoal ? (previewGoal.achieved ? "Achieved" : "In progress") : null}
+      />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { Plus, Users, Loader2, X, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import GoalPreviewModal from "@/components/GoalPreviewModal";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Travel: "oklch(0.65 0.1 185)",
@@ -35,6 +36,7 @@ export default function AppNewGoals() {
   const [sort, setSort] = useState<"popular" | "newest">("popular");
   const [page, setPage] = useState(1);
   const [confirmRemoveGoalKey, setConfirmRemoveGoalKey] = useState<string | null>(null);
+  const [previewGoal, setPreviewGoal] = useState<{ title: string; category?: string | null; addedCount: number } | null>(null);
   const pageSize = 10;
   const { data: goalsData, isLoading } = trpc.globalGoals.list.useQuery({
     page,
@@ -203,11 +205,12 @@ export default function AppNewGoals() {
                   <div
                     key={`${goal.title}-${goal.category ?? "none"}`}
                     className="sketch-border p-4 bg-background/60 hover:bg-background/90 transition-colors relative overflow-hidden flex items-start gap-3"
+                    onClick={() => setPreviewGoal({ title: goal.title, category: goal.category, addedCount: goal.addedCount })}
                   >
                     <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: color }} />
                     <div className="pl-3 flex-1 min-w-0">
                       <p
-                        className="font-semibold mb-1 truncate"
+                        className="font-semibold mb-1 line-clamp-2 text-[0.98rem] md:text-[1.02rem]"
                         style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}
                         title={goal.title}
                       >
@@ -229,7 +232,11 @@ export default function AppNewGoals() {
                     </div>
 
                     <button
-                      onClick={() => handleToggle(goal)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleToggle(goal);
+                      }}
+                      onPointerDown={(event) => event.stopPropagation()}
                       disabled={isPending}
                       className={`flex-shrink-0 sketch-button p-2 transition-all ${
                         isAdded
@@ -278,6 +285,14 @@ export default function AppNewGoals() {
           )}
         </>
       )}
+      <GoalPreviewModal
+        open={!!previewGoal}
+        onClose={() => setPreviewGoal(null)}
+        title={previewGoal?.title ?? ""}
+        category={previewGoal?.category}
+        subtitle={previewGoal ? `${previewGoal.addedCount.toLocaleString()} users added this` : null}
+        accentColor={previewGoal?.category ? CATEGORY_COLORS[previewGoal.category] : undefined}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { Users, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import GoalPreviewModal from "@/components/GoalPreviewModal";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Travel: "oklch(0.65 0.1 185)",
@@ -32,6 +33,7 @@ export default function PublicNewGoals() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sort, setSort] = useState<"popular" | "newest">("popular");
   const [page, setPage] = useState(1);
+  const [previewGoal, setPreviewGoal] = useState<{ title: string; category?: string | null; addedCount: number } | null>(null);
   const pageSize = 10;
   const { data: goalsData, isLoading } = trpc.globalGoals.list.useQuery({
     page,
@@ -63,7 +65,7 @@ export default function PublicNewGoals() {
           Log in to add these goals to your personal bucket list!
         </p>
         <a href="/signup">
-          <button className="sketch-button px-4 py-1.5 bg-foreground text-background text-sm" style={{ fontFamily: "'Space Mono', monospace" }}>
+          <button className="sketch-button px-4 py-1.5 bg-foreground text-background text-sm whitespace-nowrap" style={{ fontFamily: "'Space Mono', monospace" }}>
             Start your list →
           </button>
         </a>
@@ -156,6 +158,7 @@ export default function PublicNewGoals() {
                   <div
                     key={`${goal.title}-${goal.category ?? "none"}`}
                     className="sketch-border p-4 bg-background/60 hover:bg-background/90 transition-colors relative overflow-hidden"
+                    onClick={() => setPreviewGoal({ title: goal.title, category: goal.category, addedCount: goal.addedCount })}
                   >
                     <div
                       className="absolute left-0 top-0 bottom-0 w-1"
@@ -163,7 +166,7 @@ export default function PublicNewGoals() {
                     />
                     <div className="pl-3">
                       <p
-                        className="font-semibold mb-1 truncate"
+                        className="font-semibold mb-1 line-clamp-2 text-[0.98rem] md:text-[1.02rem]"
                         title={goal.title}
                         style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}
                       >
@@ -220,6 +223,14 @@ export default function PublicNewGoals() {
           )}
         </>
       )}
+      <GoalPreviewModal
+        open={!!previewGoal}
+        onClose={() => setPreviewGoal(null)}
+        title={previewGoal?.title ?? ""}
+        category={previewGoal?.category}
+        subtitle={previewGoal ? `${previewGoal.addedCount.toLocaleString()} users added this` : null}
+        accentColor={previewGoal?.category ? CATEGORY_COLORS[previewGoal.category] : undefined}
+      />
     </div>
   );
 }

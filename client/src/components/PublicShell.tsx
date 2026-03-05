@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import { Menu, X, Star, Github } from "lucide-react";
+import { Star, Github } from "lucide-react";
 
 const publicNavItems = [
   { label: "Leaderboard", href: "/" },
@@ -31,6 +31,7 @@ export default function PublicShell({ children }: PublicShellProps) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const creditsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -48,6 +49,30 @@ export default function PublicShell({ children }: PublicShellProps) {
       document.removeEventListener("touchstart", closeIfOutside);
     };
   }, [creditsOpen]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeIfOutside = (event: MouseEvent | TouchEvent) => {
+      if (!mobileMenuRef.current) return;
+      if (!mobileMenuRef.current.contains(event.target as Node)) {
+        setMobileOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", closeIfOutside);
+    document.addEventListener("touchstart", closeIfOutside);
+    return () => {
+      document.removeEventListener("mousedown", closeIfOutside);
+      document.removeEventListener("touchstart", closeIfOutside);
+    };
+  }, [mobileOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start p-5 md:p-[70px]">
@@ -127,99 +152,66 @@ export default function PublicShell({ children }: PublicShellProps) {
             </nav>
 
             {/* Mobile menu button */}
-            <button
-              className="md:hidden sketch-button p-2 bg-background mt-1"
-              onClick={() => setMobileOpen(!mobileOpen)}
-              aria-label="Toggle menu"
-            >
-              {mobileOpen ? <X size={18} /> : <Menu size={18} />}
-            </button>
-          </div>
+            <div className="md:hidden relative" ref={mobileMenuRef}>
+              <button
+                className={`sketch-button p-2 bg-background mt-1 hamburger-button ${mobileOpen ? "open" : ""}`}
+                onClick={() => setMobileOpen((open) => !open)}
+                aria-label="Toggle menu"
+              >
+                <span className="hamburger-line" />
+                <span className="hamburger-line" />
+                <span className="hamburger-line" />
+              </button>
 
-          {/* Mobile nav */}
-          <AnimatePresence>
-            {mobileOpen && (
-              <>
-                <motion.button
-                  type="button"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.14 }}
-                  className="md:hidden fixed inset-0 z-[200] bg-[oklch(0.18_0.02_60_/_0.38)]"
-                  onClick={() => setMobileOpen(false)}
-                  aria-label="Close menu overlay"
-                />
-                <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                  transition={{ duration: 0.16 }}
-                  className="md:hidden fixed right-4 top-6 z-[210] w-[17rem] max-w-[92vw] overflow-visible"
-                >
-                  <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)]">
-                    <div className="flex justify-end mb-1">
-                      <button
-                        type="button"
-                        onClick={() => setMobileOpen(false)}
-                        className="sketch-button h-9 w-9 p-0 bg-background flex items-center justify-center leading-none"
-                        aria-label="Close menu"
-                      >
-                        <X size={17} />
-                      </button>
+              <AnimatePresence>
+                {mobileOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                    transition={{ duration: 0.14 }}
+                    className="absolute right-0 top-[calc(100%+0.5rem)] z-[220] w-[17rem] max-w-[88vw]"
+                  >
+                    <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)] space-y-1">
+                      {publicNavItems.map((item) => (
+                        <Link key={item.href} href={item.href}>
+                          <button
+                            type="button"
+                            className={`w-full sketch-button text-left px-3 py-2 ${location === item.href ? "bg-foreground text-background border-foreground" : "text-foreground bg-background"}`}
+                            onClick={() => setMobileOpen(false)}
+                            style={{ fontFamily: "'Space Mono', monospace" }}
+                          >
+                            {item.label}
+                          </button>
+                        </Link>
+                      ))}
+                      <div className="pencil-line my-2" />
+                      <Link href="/login" className="block">
+                        <button
+                          type="button"
+                          onClick={() => setMobileOpen(false)}
+                          className="w-full sketch-button text-left px-3 py-2 bg-background"
+                          style={{ fontFamily: "'Space Mono', monospace" }}
+                        >
+                          Log in
+                        </button>
+                      </Link>
+                      <Link href="/signup" className="block">
+                        <button
+                          type="button"
+                          onClick={() => setMobileOpen(false)}
+                          className="w-full sketch-button text-left px-3 py-2 bg-foreground text-background border-foreground"
+                          style={{ fontFamily: "'Space Mono', monospace" }}
+                        >
+                          Sign up
+                        </button>
+                      </Link>
                     </div>
-                  <div className="space-y-4">
-                  {publicNavItems.map((item) => (
-                    <Link key={item.href} href={item.href}>
-                      <button
-                        type="button"
-                        className={`w-full sketch-button text-left px-3 py-2 ${
-                          location === item.href ? "active" : "text-muted-foreground bg-background"
-                        }`}
-                        onClick={() => setMobileOpen(false)}
-                        style={{ fontFamily: "'Space Mono', monospace" }}
-                      >
-                        {item.label}
-                      </button>
-                    </Link>
-                  ))}
-                  </div>
-                  <div className="pencil-line my-2" />
-                  <div className="space-y-2 pt-1">
-                  <Link href="/login" className="block">
-                  <button
-                      type="button"
-                      onClick={() => setMobileOpen(false)}
-                      className="sketch-button auth-stack-button w-full h-8 px-2 text-xs"
-                      style={{
-                        fontFamily: "'Space Mono', monospace",
-                        background: "oklch(0.95 0.015 82)",
-                        color: "oklch(0.18 0.02 60)",
-                      }}
-                    >
-                      [LOG_IN]
-                    </button>
-                  </Link>
-                  <Link href="/signup" className="block">
-                    <button
-                      type="button"
-                      onClick={() => setMobileOpen(false)}
-                      className="sketch-button auth-stack-button w-full h-8 px-2 text-xs"
-                      style={{
-                        fontFamily: "'Space Mono', monospace",
-                        background: "oklch(0.18 0.02 60)",
-                        color: "oklch(0.97 0.015 85)",
-                      }}
-                    >
-                      [SIGN_UP]
-                    </button>
-                  </Link>
-                  </div>
-                </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
 
           {/* Pencil divider */}
           <div className="pencil-line mt-3" />

@@ -2,8 +2,8 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Users, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { motion } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
+import GoalPreviewModal from "@/components/GoalPreviewModal";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Travel: "oklch(0.65 0.1 185)",
@@ -23,6 +23,7 @@ type LeaderboardTab = "goals" | "users";
 export default function AppLeaderboard() {
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("goals");
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [previewGoal, setPreviewGoal] = useState<{ title: string; category?: string | null; users: number } | null>(null);
   const { data: goalLeaderboard, isLoading: goalsLoading } = trpc.leaderboard.topGoals.useQuery(
     { year: selectedYear ?? undefined },
     {
@@ -75,36 +76,20 @@ export default function AppLeaderboard() {
 
       {/* Tab buttons */}
       <div className="flex gap-2 mb-4">
-        <motion.button
+        <button
           onClick={() => setActiveTab("goals")}
-          whileTap={{ scale: 0.98 }}
-          className={`sketch-button relative px-4 py-2 transition-colors ${activeTab === "goals" ? "text-background" : "bg-background text-foreground"}`}
+          className={`sketch-button px-4 py-2 transition-colors ${activeTab === "goals" ? "bg-foreground text-background border-foreground" : "bg-background text-foreground"}`}
           style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
         >
-          {activeTab === "goals" && (
-            <motion.span
-              layoutId="app-leaderboard-active-tab"
-              className="absolute inset-0 rounded-[6px] bg-foreground"
-              transition={{ type: "spring", stiffness: 360, damping: 30 }}
-            />
-          )}
-          <span className="relative z-10">[GOALS]</span>
-        </motion.button>
-        <motion.button
+          [GOALS]
+        </button>
+        <button
           onClick={() => setActiveTab("users")}
-          whileTap={{ scale: 0.98 }}
-          className={`sketch-button relative px-4 py-2 transition-colors ${activeTab === "users" ? "text-background" : "bg-background text-foreground"}`}
+          className={`sketch-button px-4 py-2 transition-colors ${activeTab === "users" ? "bg-foreground text-background border-foreground" : "bg-background text-foreground"}`}
           style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
         >
-          {activeTab === "users" && (
-            <motion.span
-              layoutId="app-leaderboard-active-tab"
-              className="absolute inset-0 rounded-[6px] bg-foreground"
-              transition={{ type: "spring", stiffness: 360, damping: 30 }}
-            />
-          )}
-          <span className="relative z-10">[USERS]</span>
-        </motion.button>
+          [USERS]
+        </button>
       </div>
       <div className="flex items-start gap-2 mb-6 flex-wrap">
         <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
@@ -153,11 +138,12 @@ export default function AppLeaderboard() {
             return (
               <div
                 key={goal.id}
-                className="flex items-center gap-3 px-4 py-3 sketch-border bg-background/60 hover:bg-background/90 transition-colors"
+                className="flex flex-wrap md:flex-nowrap items-start md:items-center gap-2 md:gap-3 px-3 md:px-4 py-3 sketch-border bg-background/60 hover:bg-background/90 transition-colors"
                 style={{
                   borderColor: rank <= 3 ? color : undefined,
                   boxShadow: rank <= 3 ? `2px 2px 0 ${color}40` : undefined,
                 }}
+                onClick={() => setPreviewGoal({ title: goal.title, category: goal.category, users: goal.userCount })}
               >
                 <div className="rank-badge" style={{ fontFamily: "'Space Mono', monospace" }}>
                   {rankEmoji || rank}
@@ -165,7 +151,7 @@ export default function AppLeaderboard() {
 
                 <div className="flex-1 min-w-0">
                   <p
-                    className="font-semibold truncate"
+                    className="font-semibold line-clamp-2 text-[0.96rem] md:text-base"
                     style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
                   >
                     {goal.title}
@@ -177,8 +163,8 @@ export default function AppLeaderboard() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <div className="text-right mr-2">
+                <div className="w-full md:w-auto flex items-center justify-between md:justify-end gap-2 md:flex-shrink-0">
+                  <div className="text-left md:text-right md:mr-2">
                     <p className="text-[11px] text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
                       {selectedYear ? `Year ${selectedYear}` : "All years"}
                     </p>
@@ -261,6 +247,14 @@ export default function AppLeaderboard() {
           })}
         </div>
       )}
+      <GoalPreviewModal
+        open={!!previewGoal}
+        onClose={() => setPreviewGoal(null)}
+        title={previewGoal?.title ?? ""}
+        category={previewGoal?.category}
+        subtitle={previewGoal ? `${previewGoal.users} users have this goal` : null}
+        accentColor={previewGoal?.category ? CATEGORY_COLORS[previewGoal.category] : undefined}
+      />
     </div>
   );
 }
