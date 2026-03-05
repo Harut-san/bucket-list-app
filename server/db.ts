@@ -10,6 +10,7 @@ import {
 } from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _hasAvatarImageUrlColumn: boolean | null = null;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -21,6 +22,64 @@ export async function getDb() {
     }
   }
   return _db;
+}
+
+async function supportsAvatarImageUrlColumn(db: NonNullable<ReturnType<typeof drizzle>>) {
+  if (_hasAvatarImageUrlColumn != null) return _hasAvatarImageUrlColumn;
+  try {
+    const result = await db.execute(
+      sql`SELECT 1 as ok
+          FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'user_settings'
+            AND COLUMN_NAME = 'avatarImageUrl'
+          LIMIT 1`
+    );
+    _hasAvatarImageUrlColumn = Boolean((result as any)?.[0]?.[0]?.ok);
+  } catch {
+    // If metadata lookup fails, assume the modern schema.
+    _hasAvatarImageUrlColumn = true;
+  }
+  return _hasAvatarImageUrlColumn;
+}
+
+async function selectUserSettingsByUserId(
+  db: NonNullable<ReturnType<typeof drizzle>>,
+  userId: number
+) {
+  const hasAvatarImageUrl = await supportsAvatarImageUrlColumn(db);
+  const avatarImageSql = hasAvatarImageUrl
+    ? sql`us.avatarImageUrl`
+    : sql`NULL as avatarImageUrl`;
+
+  const result = await db.execute(
+    sql`SELECT
+          us.id,
+          us.userId,
+          us.displayName,
+          us.bio,
+          us.avatarEmoji,
+          ${avatarImageSql},
+          us.isPublic,
+          us.createdAt,
+          us.updatedAt
+        FROM user_settings us
+        WHERE us.userId = ${userId}
+        LIMIT 1`
+  );
+  return ((result as any)?.[0]?.[0] ?? null) as
+    | {
+        id: number;
+        userId: number;
+        displayName: string | null;
+        bio: string | null;
+        avatarEmoji: string | null;
+        avatarImageUrl: string | null;
+        isPublic: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+      }
+    | null;
 }
 
 // ─── Users ────────────────────────────────────────────────────────
@@ -218,13 +277,13 @@ export async function getLeaderboard(limit = 100) {
     sql`SELECT u.id, u.name, u.email,
         COUNT(CASE WHEN b.achieved = 1 THEN 1 END) as achievedCount,
         COUNT(b.id) as totalCount,
-        us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
+        MAX(us.displayName) as displayName, MAX(us.avatarEmoji) as avatarEmoji, NULL as avatarImageUrl, MAX(us.isPublic) as isPublic
       FROM users u
       LEFT JOIN bucket_items b ON b.userId = u.id
       LEFT JOIN user_settings us ON us.userId = u.id
       WHERE (us.isPublic IS NULL OR us.isPublic = 1)
-      GROUP BY u.id, u.name, u.email, us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
-      HAVING achievedCount > 0
+      GROUP BY u.id, u.name, u.email
+      HAVING COUNT(CASE WHEN b.achieved = 1 THEN 1 END) > 0
       ORDER BY achievedCount DESC, totalCount ASC
       LIMIT ${limit}`
   );
@@ -409,24 +468,26 @@ export async function seedGlobalGoals() {
 export async function getUserSettings(userId: number) {
   const db = await getDb();
   if (!db) return null;
-  const rows = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
-  return rows[0] ?? null;
+  return selectUserSettingsByUserId(db, userId);
 }
 
 export async function upsertUserSettings(userId: number, data: Partial<InsertUserSettings>) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  const hasAvatarImageUrl = await supportsAvatarImageUrlColumn(db);
+  const existing = await selectUserSettingsByUserId(db, userId);
+  const nextData: Partial<InsertUserSettings> = {
+    ...data,
+    avatarImageUrl: hasAvatarImageUrl ? data.avatarImageUrl : undefined,
+  };
 
-  const existing = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
-
-  if (existing.length > 0) {
-    await db.update(userSettings).set(data).where(eq(userSettings.userId, userId));
+  if (existing) {
+    await db.update(userSettings).set(nextData).where(eq(userSettings.userId, userId));
   } else {
-    await db.insert(userSettings).values({ userId, ...data });
+    await db.insert(userSettings).values({ userId, ...nextData });
   }
 
-  const rows = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
-  return rows[0];
+  return selectUserSettingsByUserId(db, userId);
 }
 
 // ─── Top Goals Leaderboard ────────────────────────────────────────
@@ -479,13 +540,13 @@ export async function getTopUsers(limit = 100) {
         COUNT(b.id) as totalCount,
         COUNT(b.id) as addedCountInYear,
         COUNT(CASE WHEN b.achieved = 1 THEN 1 END) as achievedCountInYear,
-        us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
+        MAX(us.displayName) as displayName, MAX(us.avatarEmoji) as avatarEmoji, NULL as avatarImageUrl, MAX(us.isPublic) as isPublic
       FROM users u
       LEFT JOIN bucket_items b ON b.userId = u.id
       LEFT JOIN user_settings us ON us.userId = u.id
       WHERE (us.isPublic IS NULL OR us.isPublic = 1)
-      GROUP BY u.id, u.name, u.email, us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
-      HAVING totalCount > 0
+      GROUP BY u.id, u.name, u.email
+      HAVING COUNT(b.id) > 0
       ORDER BY achievedCount DESC, totalCount DESC
       LIMIT ${limit}`
   );
@@ -533,13 +594,16 @@ export async function getTopUsersByYear(limit = 100, year?: number) {
         COUNT(b.id) as totalCount,
         COUNT(CASE WHEN EXTRACT(YEAR FROM b.createdAt) = ${year} THEN 1 END) as addedCountInYear,
         COUNT(CASE WHEN b.achieved = 1 AND EXTRACT(YEAR FROM b.achievedAt) = ${year} THEN 1 END) as achievedCountInYear,
-        us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
+        MAX(us.displayName) as displayName, MAX(us.avatarEmoji) as avatarEmoji, NULL as avatarImageUrl, MAX(us.isPublic) as isPublic
       FROM users u
       LEFT JOIN bucket_items b ON b.userId = u.id
       LEFT JOIN user_settings us ON us.userId = u.id
       WHERE (us.isPublic IS NULL OR us.isPublic = 1)
-      GROUP BY u.id, u.name, u.email, us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
-      HAVING (addedCountInYear > 0 OR achievedCountInYear > 0)
+      GROUP BY u.id, u.name, u.email
+      HAVING (
+        COUNT(CASE WHEN EXTRACT(YEAR FROM b.createdAt) = ${year} THEN 1 END) > 0
+        OR COUNT(CASE WHEN b.achieved = 1 AND EXTRACT(YEAR FROM b.achievedAt) = ${year} THEN 1 END) > 0
+      )
       ORDER BY achievedCountInYear DESC, addedCountInYear DESC, achievedCount DESC, totalCount ASC
       LIMIT ${limit}`
   );
@@ -661,9 +725,13 @@ export async function getUserYearlySummary(userId: number, year?: number | null)
 export async function getPublicShareProfile(userId: number) {
   const db = await getDb();
   if (!db) return null;
+  const hasAvatarImageUrl = await supportsAvatarImageUrlColumn(db);
+  const avatarImageSql = hasAvatarImageUrl
+    ? sql`us.avatarImageUrl`
+    : sql`NULL as avatarImageUrl`;
 
   const userResult = await db.execute(
-    sql`SELECT u.id, u.name, us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
+    sql`SELECT u.id, u.name, us.displayName, us.avatarEmoji, ${avatarImageSql}, us.isPublic
       FROM users u
       LEFT JOIN user_settings us ON us.userId = u.id
       WHERE u.id = ${userId}

@@ -2,6 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Users, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { motion } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -60,7 +61,7 @@ export default function AppLeaderboard() {
           <h2 className="page-heading text-3xl font-bold" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}>
             [LEADERBOARD]
           </h2>
-          <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          <p className="page-subtitle text-sm text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
             top achievements
           </p>
         </div>
@@ -74,28 +75,36 @@ export default function AppLeaderboard() {
 
       {/* Tab buttons */}
       <div className="flex gap-2 mb-4">
-        <button
+        <motion.button
           onClick={() => setActiveTab("goals")}
-          className={`sketch-button px-4 py-2 transition-colors ${
-            activeTab === "goals"
-              ? "bg-foreground text-background"
-              : "bg-background text-foreground"
-          }`}
+          whileTap={{ scale: 0.98 }}
+          className={`sketch-button relative px-4 py-2 transition-colors ${activeTab === "goals" ? "text-background" : "bg-background text-foreground"}`}
           style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
         >
-          [GOALS]
-        </button>
-        <button
+          {activeTab === "goals" && (
+            <motion.span
+              layoutId="app-leaderboard-active-tab"
+              className="absolute inset-0 rounded-[6px] bg-foreground"
+              transition={{ type: "spring", stiffness: 360, damping: 30 }}
+            />
+          )}
+          <span className="relative z-10">[GOALS]</span>
+        </motion.button>
+        <motion.button
           onClick={() => setActiveTab("users")}
-          className={`sketch-button px-4 py-2 transition-colors ${
-            activeTab === "users"
-              ? "bg-foreground text-background"
-              : "bg-background text-foreground"
-          }`}
+          whileTap={{ scale: 0.98 }}
+          className={`sketch-button relative px-4 py-2 transition-colors ${activeTab === "users" ? "text-background" : "bg-background text-foreground"}`}
           style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
         >
-          [USERS]
-        </button>
+          {activeTab === "users" && (
+            <motion.span
+              layoutId="app-leaderboard-active-tab"
+              className="absolute inset-0 rounded-[6px] bg-foreground"
+              transition={{ type: "spring", stiffness: 360, damping: 30 }}
+            />
+          )}
+          <span className="relative z-10">[USERS]</span>
+        </motion.button>
       </div>
       <div className="flex items-start gap-2 mb-6 flex-wrap">
         <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>

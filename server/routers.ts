@@ -37,6 +37,7 @@ import {
 import { attachSessionCookie, createSessionToken } from "./_core/auth";
 
 const LOCAL_AVATAR_DIR = path.join(os.tmpdir(), "bucket-list-app-avatars");
+const AVATAR_IMAGE_URL_MAX_LENGTH = 1024;
 
 async function saveAvatarLocally(userId: number, buffer: Buffer, extension: string) {
   const safeExtension = extension.replace(/[^a-z0-9]/gi, "").toLowerCase() || "webp";
@@ -305,7 +306,7 @@ export const appRouter = router({
           displayName: z.string().max(128).optional(),
           bio: z.string().max(500).nullable().optional(),
           avatarEmoji: z.string().max(32).optional(),
-          avatarImageUrl: z.string().max(2048).nullable().optional(),
+          avatarImageUrl: z.string().max(AVATAR_IMAGE_URL_MAX_LENGTH).nullable().optional(),
           isPublic: z.boolean().optional(),
         })
       )
@@ -350,6 +351,13 @@ export const appRouter = router({
           console.warn("[settings.uploadAvatar] Remote storage unavailable, falling back to local file storage", error);
           url = await saveAvatarLocally(ctx.user.id, buffer, extension);
         }
+        if (url.length > AVATAR_IMAGE_URL_MAX_LENGTH) {
+          console.warn(
+            `[settings.uploadAvatar] Uploaded URL too long (${url.length}), falling back to local file storage`
+          );
+          url = await saveAvatarLocally(ctx.user.id, buffer, extension);
+        }
+        await upsertUserSettings(ctx.user.id, { avatarImageUrl: url });
         return { url };
       }),
   }),

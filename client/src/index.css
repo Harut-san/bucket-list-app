@@ -139,6 +139,7 @@
   input[type="search"],
   input[type="url"],
   input[type="tel"],
+  input:not([type]),
   textarea {
     caret-color: oklch(0.22 0.02 60);
     caret-shape: block;
@@ -383,6 +384,16 @@
     font-family: 'Space Mono', monospace;
     font-weight: 700;
     letter-spacing: 0.05em;
+  }
+
+  .page-heading {
+    line-height: 1.12;
+    margin-bottom: 0.25rem;
+  }
+
+  .page-subtitle {
+    line-height: 1.52;
+    margin-top: 0.2rem;
   }
 
   .font-handwritten {

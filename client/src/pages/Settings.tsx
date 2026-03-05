@@ -2,6 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { AVATAR_EMOJIS, DEFAULT_AVATAR_EMOJI, normalizeAvatarEmoji } from "@shared/const";
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, Check, Eye, EyeOff, Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -15,7 +16,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import UserAvatar from "@/components/UserAvatar";
-import { PUBLIC_APP_URL } from "@/const";
 
 const CROPPER_SIZE = 280;
 const OUTPUT_SIZE = 512;
@@ -151,14 +151,12 @@ export default function Settings() {
     },
     onError: () => toast.error("Failed to save settings"),
   });
-  const uploadAvatarMutation = trpc.settings.uploadAvatar.useMutation({
-    onError: () => toast.error("Failed to upload avatar image"),
-  });
+  const uploadAvatarMutation = trpc.settings.uploadAvatar.useMutation();
   const deleteAccountMutation = trpc.auth.deleteAccount.useMutation({
     onSuccess: () => {
       toast.success("Account deleted successfully");
       window.setTimeout(() => {
-        window.location.href = PUBLIC_APP_URL;
+        window.location.href = "/";
       }, 250);
     },
     onError: () => toast.error("Failed to delete account"),
@@ -206,11 +204,16 @@ export default function Settings() {
       });
       const uploaded = await uploadAvatarMutation.mutateAsync({ dataUrl: croppedDataUrl });
       setAvatarImageUrl(uploaded.url);
+      await utils.settings.get.invalidate();
       setUploadedAt(Date.now());
       setCropSource(null);
       toast.success("Avatar photo uploaded");
-    } catch {
-      toast.error("Failed to crop or upload image");
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Failed to crop or upload image";
+      toast.error(message);
     }
   };
 
@@ -314,6 +317,7 @@ export default function Settings() {
               Display name
             </label>
             <input
+              type="text"
               className="sketch-input w-full px-3 py-2 text-sm"
               placeholder={user?.name ?? "Your name"}
               value={displayName}
@@ -430,9 +434,9 @@ export default function Settings() {
           {saved ? "Saved!" : "Save settings"}
         </button>
       </form>
-      {cropSource && (
+      {cropSource ? createPortal(
         <div
-          className="fixed inset-0 z-[1000] flex items-start justify-center overflow-y-auto p-4 md:items-center"
+          className="fixed inset-0 z-[1300] flex items-start justify-center overflow-y-auto p-4 md:items-center"
           style={{ background: "oklch(0.18 0.02 60 / 0.55)" }}
           onClick={() => setCropSource(null)}
         >
@@ -517,8 +521,9 @@ export default function Settings() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+      ) : null}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent className="sketch-card">
           <AlertDialogHeader>

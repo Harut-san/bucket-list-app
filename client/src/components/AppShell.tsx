@@ -15,7 +15,6 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { normalizeAvatarEmoji } from "@shared/const";
 import UserAvatar from "@/components/UserAvatar";
-import { PUBLIC_APP_URL } from "@/const";
 
 const appNavItems = [
   { label: "My List", href: "/app" },
@@ -122,7 +121,7 @@ export default function AppShell({ children }: AppShellProps) {
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => {
       logout();
-      window.location.href = PUBLIC_APP_URL;
+      window.location.href = "/";
     },
   });
 
