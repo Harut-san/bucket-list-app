@@ -2,8 +2,18 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { AVATAR_EMOJIS, DEFAULT_AVATAR_EMOJI, normalizeAvatarEmoji } from "@shared/const";
 import { useState, useEffect } from "react";
-import { Settings2, Loader2, Check, Eye, EyeOff } from "lucide-react";
+import { Loader2, Check, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function Settings() {
   const { user } = useAuth();
@@ -15,6 +25,7 @@ export default function Settings() {
   const [avatarEmoji, setAvatarEmoji] = useState<string>(DEFAULT_AVATAR_EMOJI);
   const [isPublic, setIsPublic] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -36,6 +47,13 @@ export default function Settings() {
     },
     onError: () => toast.error("Failed to save settings"),
   });
+  const deleteAccountMutation = trpc.auth.deleteAccount.useMutation({
+    onSuccess: () => {
+      toast.success("Account deleted");
+      window.location.href = "/";
+    },
+    onError: () => toast.error("Failed to delete account"),
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +63,10 @@ export default function Settings() {
       avatarEmoji: normalizeAvatarEmoji(avatarEmoji),
       isPublic,
     });
+  };
+
+  const handleDeleteAccount = () => {
+    deleteAccountMutation.mutate();
   };
 
   if (isLoading) {
@@ -59,7 +81,6 @@ export default function Settings() {
   return (
     <div className="py-4">
       <div className="flex items-center gap-3 mb-6">
-        <Settings2 size={28} style={{ color: "oklch(0.62 0.12 290)" }} />
         <div>
           <h2 className="text-3xl font-bold" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}>
             Settings
@@ -70,7 +91,7 @@ export default function Settings() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 max-w-lg">
+      <form onSubmit={handleSubmit} className="space-y-6 w-full">
         {/* Profile section */}
         <div className="sketch-border p-5 bg-background/60">
           <h3 className="text-xl font-bold mb-4" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}>
@@ -198,6 +219,17 @@ export default function Settings() {
               <span className="text-sm" style={{ fontFamily: "'Courier Prime', monospace" }}>{user?.name ?? "—"}</span>
             </div>
           </div>
+          <div className="pencil-line my-4" />
+          <button
+            type="button"
+            onClick={() => setDeleteDialogOpen(true)}
+            disabled={deleteAccountMutation.isPending}
+            className="sketch-button px-4 py-2 bg-red-100 text-red-700 border-red-400 disabled:opacity-60 inline-flex items-center gap-2"
+            style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
+          >
+            {deleteAccountMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : null}
+            Delete account
+          </button>
         </div>
 
         <div className="pencil-line" />
@@ -215,6 +247,33 @@ export default function Settings() {
           {saved ? "Saved!" : "Save settings"}
         </button>
       </form>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent className="sketch-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.04em" }}>
+              Delete account?
+            </AlertDialogTitle>
+            <AlertDialogDescription style={{ fontFamily: "'Courier Prime', monospace", lineHeight: 1.55 }}>
+              This permanently deletes your account and your bucket list items. Shared goals from other users stay available.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              className="sketch-button bg-background"
+              style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAccount}
+              className="sketch-button bg-red-100 text-red-700 border-red-400 hover:bg-red-200"
+              style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
+            >
+              {deleteAccountMutation.isPending ? "Deleting..." : "Delete account"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

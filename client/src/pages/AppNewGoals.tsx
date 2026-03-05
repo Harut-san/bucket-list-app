@@ -1,6 +1,6 @@
 import { trpc } from "@/lib/trpc";
-import { Plus, Users, Loader2, X, ChevronLeft, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Plus, Users, Loader2, X, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -34,6 +34,7 @@ export default function AppNewGoals() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sort, setSort] = useState<"popular" | "newest">("popular");
   const [page, setPage] = useState(1);
+  const [confirmRemoveGoalKey, setConfirmRemoveGoalKey] = useState<string | null>(null);
   const pageSize = 10;
   const { data: goalsData, isLoading } = trpc.globalGoals.list.useQuery({
     page,
@@ -62,14 +63,15 @@ export default function AppNewGoals() {
     onError: () => toast.error("Failed to remove goal"),
   });
 
-  const myGoals = new Map(myItems?.map((i) => [i.title.toLowerCase(), i]) ?? []);
+  const toGoalKey = (value: string) => value.trim().toLowerCase();
+  const myGoals = new Map(myItems?.map((i) => [toGoalKey(i.title), i]) ?? []);
   const goals = goalsData?.items ?? [];
   const sortedGoals = useMemo(() => {
     return goals
       .map((goal, index) => ({ goal, index }))
       .sort((a, b) => {
-        const aInMine = myGoals.has(a.goal.title.toLowerCase()) ? 1 : 0;
-        const bInMine = myGoals.has(b.goal.title.toLowerCase()) ? 1 : 0;
+        const aInMine = myGoals.has(toGoalKey(a.goal.title)) ? 1 : 0;
+        const bInMine = myGoals.has(toGoalKey(b.goal.title)) ? 1 : 0;
         if (aInMine !== bInMine) return aInMine - bInMine;
         return a.index - b.index;
       })
@@ -78,13 +80,25 @@ export default function AppNewGoals() {
   const totalPages = goalsData?.totalPages ?? 1;
 
   const handleToggle = (goal: { id: number; title: string; category: string | null }) => {
-    const existing = myGoals.get(goal.title.toLowerCase());
+    const existing = myGoals.get(toGoalKey(goal.title));
     if (existing) {
-      deleteMutation.mutate({ id: existing.id });
+      const goalKey = toGoalKey(goal.title);
+      if (confirmRemoveGoalKey === goalKey) {
+        deleteMutation.mutate({ id: existing.id });
+        setConfirmRemoveGoalKey(null);
+        return;
+      }
+      setConfirmRemoveGoalKey(goalKey);
     } else {
       addMutation.mutate({ title: goal.title, category: goal.category ?? undefined });
     }
   };
+
+  useEffect(() => {
+    if (!confirmRemoveGoalKey) return;
+    const timeout = window.setTimeout(() => setConfirmRemoveGoalKey(null), 2500);
+    return () => window.clearTimeout(timeout);
+  }, [confirmRemoveGoalKey]);
 
   return (
     <div className="py-4">
@@ -93,7 +107,7 @@ export default function AppNewGoals() {
           <h2 className="page-heading text-3xl font-bold" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}>
             [NEW_GOALS]
           </h2>
-          <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          <p className="text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Courier Prime', monospace" }}>
             goals added by users
           </p>
         </div>
@@ -180,9 +194,10 @@ export default function AppNewGoals() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {sortedGoals.map((goal) => {
                 const color = CATEGORY_COLORS[goal.category ?? ""] ?? "oklch(0.55 0.04 70)";
-                const existing = myGoals.get(goal.title.toLowerCase());
+                const existing = myGoals.get(toGoalKey(goal.title));
                 const isAdded = !!existing;
                 const isPending = addMutation.isPending || deleteMutation.isPending;
+                const isConfirmingRemove = isAdded && confirmRemoveGoalKey === toGoalKey(goal.title);
 
                 return (
                   <div
@@ -222,8 +237,9 @@ export default function AppNewGoals() {
                           : "bg-background hover:bg-foreground hover:text-background"
                       }`}
                       aria-label={isAdded ? "Remove from my list" : "Add to my list"}
+                      title={isConfirmingRemove ? "Click again to confirm remove" : undefined}
                     >
-                      {isAdded ? <X size={14} /> : <Plus size={14} />}
+                      {isConfirmingRemove ? <Check size={14} /> : isAdded ? <X size={14} /> : <Plus size={14} />}
                     </button>
                   </div>
                 );

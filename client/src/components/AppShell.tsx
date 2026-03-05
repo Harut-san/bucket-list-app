@@ -249,7 +249,7 @@ export default function AppShell({ children }: AppShellProps) {
                         <button
                           type="button"
                           onClick={() => setAccountMenuOpen(false)}
-                          className="w-full text-left px-3 py-2 rounded hover:bg-muted transition-colors flex items-center gap-2"
+                          className="w-full sketch-button text-left px-3 py-2 transition-colors flex items-center gap-2 bg-background hover:bg-muted"
                           style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.25rem", fontWeight: 700 }}
                         >
                           <Settings size={16} />
@@ -263,7 +263,7 @@ export default function AppShell({ children }: AppShellProps) {
                           setAccountMenuOpen(false);
                           logoutMutation.mutate();
                         }}
-                        className="w-full text-left px-3 py-2 rounded hover:bg-destructive/10 text-destructive transition-colors flex items-center gap-2"
+                        className="w-full sketch-button text-left px-3 py-2 text-destructive transition-colors flex items-center gap-2 bg-background hover:bg-destructive/10"
                         style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.25rem", fontWeight: 700 }}
                       >
                         <LogOut size={16} />
@@ -305,14 +305,35 @@ export default function AppShell({ children }: AppShellProps) {
           {/* Mobile nav */}
           <AnimatePresence>
             {mobileOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                transition={{ duration: 0.16 }}
-                className="md:hidden absolute right-2 top-[calc(100%+0.02rem)] z-[120] w-[70%] overflow-visible"
-              >
-                <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)]">
+              <>
+                <motion.button
+                  type="button"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.14 }}
+                  className="md:hidden fixed inset-0 z-[110] bg-[oklch(0.18_0.02_60_/_0.38)]"
+                  onClick={() => setMobileOpen(false)}
+                  aria-label="Close menu overlay"
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                  transition={{ duration: 0.16 }}
+                  className="md:hidden absolute right-2 top-[calc(100%+0.25rem)] z-[120] w-[17rem] max-w-[92vw] overflow-visible"
+                >
+                  <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)]">
+                    <div className="flex justify-end mb-1">
+                      <button
+                        type="button"
+                        onClick={() => setMobileOpen(false)}
+                        className="sketch-button h-9 w-9 p-0 bg-background"
+                        aria-label="Close menu"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
                   <div className="px-3 py-2">
                     <p
                       className="text-base leading-none truncate"
@@ -333,25 +354,28 @@ export default function AppShell({ children }: AppShellProps) {
                       <ProgressBadge total={stats.total} achieved={stats.achieved} rank={stats.rank} compact />
                     </div>
                   )}
-                  {appNavItems.map((item) => (
+                  <div className="space-y-2">
+                    {appNavItems.map((item) => (
                     <Link key={item.href} href={item.href}>
-                      <span
-                        className={`nav-link block px-2 py-2 rounded ${
-                          location === item.href ? "active" : "text-muted-foreground"
+                      <button
+                        type="button"
+                        className={`w-full sketch-button text-left px-3 py-2 ${
+                          location === item.href ? "active" : "text-muted-foreground bg-background"
                         }`}
                         onClick={() => setMobileOpen(false)}
                         style={{ fontFamily: "'Space Mono', monospace" }}
                       >
-                        <span className="nav-link-label">{item.label}</span>
-                      </span>
+                        {item.label}
+                      </button>
                     </Link>
-                  ))}
+                    ))}
+                  </div>
                   <div className="pencil-line my-2" />
                   <Link href="/app/settings">
                     <button
                       type="button"
                       onClick={() => setMobileOpen(false)}
-                      className="w-full text-left px-3 py-2 rounded hover:bg-muted transition-colors flex items-center gap-2"
+                      className="w-full sketch-button text-left px-3 py-2 transition-colors flex items-center gap-2 bg-background hover:bg-muted"
                       style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.05rem", fontWeight: 700 }}
                     >
                       <Settings size={15} />
@@ -364,14 +388,15 @@ export default function AppShell({ children }: AppShellProps) {
                       setMobileOpen(false);
                       logoutMutation.mutate();
                     }}
-                    className="w-full text-left px-3 py-2 rounded hover:bg-destructive/10 text-destructive transition-colors flex items-center gap-2"
+                    className="w-full sketch-button text-left px-3 py-2 text-destructive transition-colors flex items-center gap-2 bg-background hover:bg-destructive/10"
                     style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.05rem", fontWeight: 700 }}
                   >
                     <LogOut size={15} />
                     Log out
                   </button>
                 </div>
-              </motion.div>
+                </motion.div>
+              </>
             )}
           </AnimatePresence>
 

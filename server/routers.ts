@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import { COOKIE_NAME, normalizeAvatarEmoji } from "@shared/const";
+import { COOKIE_NAME, DEFAULT_AVATAR_EMOJI, normalizeAvatarEmoji } from "@shared/const";
 import { compare, hash } from "bcryptjs";
 import { TRPCError } from "@trpc/server";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -8,6 +8,7 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
   addBucketItem,
   createUser,
+  deleteUserAccount,
   deleteBucketItem,
   getBucketItems,
   getBucketStats,
@@ -22,6 +23,7 @@ import {
   updateBucketItem,
   upsertUserSettings,
   getTopGoals,
+  getTopGoalsByYear,
   getTopUsersByYear,
   getUserYearlySummary,
   getPublicShareProfile,
@@ -80,6 +82,7 @@ export const appRouter = router({
           passwordHash,
           name: input.name?.trim() || null,
         });
+        await upsertUserSettings(user.id, { avatarEmoji: DEFAULT_AVATAR_EMOJI });
 
         const token = await createSessionToken(user);
         attachSessionCookie(ctx.req, ctx.res, token);
@@ -112,6 +115,13 @@ export const appRouter = router({
       }),
 
     logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return { success: true } as const;
+    }),
+
+    deleteAccount: protectedProcedure.mutation(async ({ ctx }) => {
+      await deleteUserAccount(ctx.user.id);
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
@@ -191,9 +201,15 @@ export const appRouter = router({
       return getLeaderboard(100);
     }),
 
-    topGoals: publicProcedure.query(async () => {
-      return getTopGoals(100);
-    }),
+    topGoals: publicProcedure
+      .input(
+        z.object({
+          year: z.number().int().min(1900).max(3000).optional(),
+        }).optional()
+      )
+      .query(async ({ input }) => {
+        return getTopGoalsByYear(100, input?.year);
+      }),
 
     topUsers: publicProcedure
       .input(
@@ -252,7 +268,13 @@ export const appRouter = router({
   // ─── User Settings ────────────────────────────────────────────────
   settings: router({
     get: protectedProcedure.query(async ({ ctx }) => {
-      return getUserSettings(ctx.user.id);
+      const existing = await getUserSettings(ctx.user.id);
+      if (!existing || !existing.avatarEmoji) {
+        return upsertUserSettings(ctx.user.id, {
+          avatarEmoji: normalizeAvatarEmoji(existing?.avatarEmoji),
+        });
+      }
+      return existing;
     }),
 
     update: protectedProcedure

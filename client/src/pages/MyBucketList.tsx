@@ -117,51 +117,73 @@ async function renderGoalsSnapshot(options: {
   items: BucketItem[];
 }) {
   const width = 1080;
-  const rowHeight = 56;
+  const height = 1920;
+  const rowHeight = 92;
+  const listTop = 500;
   const maxRows = Math.min(14, options.items.length);
-  const height = 320 + maxRows * rowHeight;
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas unavailable");
 
-  ctx.fillStyle = "#f8f3e8";
+  ctx.fillStyle = "#f7f0e2";
   ctx.fillRect(0, 0, width, height);
 
+  ctx.strokeStyle = "#2c2117";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(36, 36, width - 72, height - 72);
+
+  ctx.fillStyle = "#efe5d1";
+  ctx.fillRect(68, 68, width - 136, height - 136);
+
   ctx.fillStyle = "#211911";
-  ctx.font = "700 56px 'Space Mono'";
-  ctx.fillText("[BUCKET_LIST]", 56, 88);
+  ctx.font = "700 62px 'Space Mono'";
+  ctx.fillText("[BUCKET_LIST]", 108, 156);
 
-  ctx.font = "600 28px 'Space Mono'";
-  ctx.fillText(`${options.avatarEmoji} ${options.displayName}`, 56, 140);
+  ctx.font = "600 36px 'Space Mono'";
+  ctx.fillText(`${options.avatarEmoji} ${options.displayName}`, 108, 232);
 
-  ctx.font = "500 24px 'Courier Prime'";
+  ctx.font = "500 30px 'Courier Prime'";
   ctx.fillStyle = "#4e4b45";
-  ctx.fillText(`${options.yearLabel} · Added ${options.addedCount} · Achieved ${options.achievedCount}`, 56, 180);
+  ctx.fillText(`${options.yearLabel}`, 108, 286);
+  ctx.fillText(`Added ${options.addedCount} · Achieved ${options.achievedCount}`, 108, 332);
 
   ctx.strokeStyle = "#211911";
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(56, 204);
-  ctx.lineTo(width - 56, 204);
+  ctx.moveTo(108, 372);
+  ctx.lineTo(width - 108, 372);
   ctx.stroke();
 
-  ctx.font = "600 24px 'Space Mono'";
+  ctx.font = "700 34px 'Space Mono'";
+  ctx.fillStyle = "#211911";
+  ctx.fillText("Filtered goals", 108, 436);
+
+  ctx.font = "600 30px 'Space Mono'";
   options.items.slice(0, maxRows).forEach((item, index) => {
-    const y = 248 + index * rowHeight;
+    const rowY = listTop + index * rowHeight;
+    ctx.fillStyle = "#f9f2e7";
+    ctx.strokeStyle = "#2c2117";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(100, rowY - 52, width - 200, 74);
+    ctx.fillRect(100, rowY - 52, width - 200, 74);
     ctx.fillStyle = item.achieved ? "#716e68" : "#211911";
     const marker = item.achieved ? "✓" : "◻";
     const text = `${marker} ${item.title}`;
-    ctx.fillText(text.slice(0, 74), 64, y);
+    ctx.fillText(text.slice(0, 42), 126, rowY - 2);
 
     if (item.category) {
-      ctx.font = "500 18px 'Courier Prime'";
+      ctx.font = "600 24px 'Courier Prime'";
       ctx.fillStyle = "#5a5650";
-      ctx.fillText(item.category, width - 240, y);
-      ctx.font = "600 24px 'Space Mono'";
+      ctx.fillText(item.category, width - 340, rowY - 2);
+      ctx.font = "600 30px 'Space Mono'";
     }
   });
+
+  ctx.font = "500 24px 'Courier Prime'";
+  ctx.fillStyle = "#4e4b45";
+  ctx.fillText("Shared from bucket list app", 108, height - 112);
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -562,6 +584,10 @@ export default function MyBucketList() {
   const displayItems = selectedCategory
     ? items.filter((item) => item.category === selectedCategory)
     : items;
+  const shareSnapshotItems = displayItems.filter((item) => {
+    if (selectedYear == null) return true;
+    return new Date(item.createdAt).getFullYear() === selectedYear;
+  });
   const yearlySummaryQuery = trpc.bucketList.yearlySummary.useQuery({
     year: selectedYear ?? undefined,
   });
@@ -704,20 +730,17 @@ export default function MyBucketList() {
     toggleMutation.mutate({ id });
   }, [items, toggleMutation]);
 
-  useEffect(() => {
-    const onClickOutside = () => setShareOpen(false);
-    if (!shareOpen) return;
-    document.addEventListener("click", onClickOutside);
-    return () => document.removeEventListener("click", onClickOutside);
-  }, [shareOpen]);
-
   const handleCopyShareLink = async () => {
     if (!user?.id) {
       toast.error("Unable to generate share link");
       return;
     }
 
-    const url = `${window.location.origin}/share/${user.id}`;
+    const params = new URLSearchParams();
+    if (selectedCategory) params.set("category", selectedCategory);
+    if (selectedYear != null) params.set("year", String(selectedYear));
+    const query = params.toString();
+    const url = `${window.location.origin}/share/${user.id}${query ? `?${query}` : ""}`;
     try {
       await navigator.clipboard.writeText(url);
       toast.success("Share link copied");
@@ -731,13 +754,15 @@ export default function MyBucketList() {
   const handleCopySnapshot = async () => {
     try {
       const yearLabel = selectedYear ? `Year ${selectedYear}` : "All years";
+      const categoryLabel = selectedCategory ?? "All categories";
+      const achievedCount = shareSnapshotItems.filter((item) => item.achieved).length;
       const snapshotBlob = await renderGoalsSnapshot({
         displayName,
         avatarEmoji,
-        yearLabel,
-        addedCount: selectedYearStats.addedCount,
-        achievedCount: selectedYearStats.achievedCount,
-        items,
+        yearLabel: `${yearLabel} · ${categoryLabel}`,
+        addedCount: shareSnapshotItems.length,
+        achievedCount,
+        items: shareSnapshotItems,
       });
 
       if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
@@ -766,45 +791,21 @@ export default function MyBucketList() {
           <h2 className="page-heading text-3xl font-bold" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}>
             [MY_BUCKET_LIST]
           </h2>
-          <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          <p className="text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Courier Prime', monospace" }}>
             {total === 0
               ? "no goals yet — add your first one!"
               : `${achieved} of ${total} goals achieved`}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="relative" onClick={(event) => event.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => setShareOpen((open) => !open)}
-              className="sketch-button px-3 py-2 bg-background flex items-center gap-2"
-            >
-              <Share2 size={15} />
-              Share
-            </button>
-            {shareOpen && (
-              <div className="absolute right-0 mt-2 sketch-border bg-background p-1.5 z-40 min-w-44">
-                <button
-                  type="button"
-                  onClick={handleCopyShareLink}
-                  className="w-full text-left px-2.5 py-2 rounded hover:bg-muted text-sm flex items-center gap-2"
-                  style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
-                >
-                  <Link2 size={14} />
-                  Copy link
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCopySnapshot}
-                  className="w-full text-left px-2.5 py-2 rounded hover:bg-muted text-sm flex items-center gap-2"
-                  style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
-                >
-                  <ImageDown size={14} />
-                  Copy snapshot
-                </button>
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            className="sketch-button px-3 py-2 bg-background flex items-center gap-2"
+          >
+            <Share2 size={15} />
+            Share
+          </button>
           <button
             onClick={() => setShowForm(true)}
             className="sketch-button px-4 py-2 bg-foreground text-background flex items-center gap-2"
@@ -1063,6 +1064,59 @@ export default function MyBucketList() {
           saving={updateMutation.isPending}
         />
       )}
+      {shareOpen &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4"
+            style={{ background: "oklch(0.18 0.02 60 / 0.55)" }}
+            onClick={() => setShareOpen(false)}
+          >
+            <div
+              className="sketch-card w-full max-w-sm p-4"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h3
+                  style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.04em", fontSize: "1.25rem" }}
+                >
+                  Share
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShareOpen(false)}
+                  className="sketch-button h-9 w-9 p-0 bg-background"
+                  aria-label="Close share options"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3 leading-relaxed" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                Uses current filters: {selectedYear ? `Year ${selectedYear}` : "All years"} · {selectedCategory ?? "All categories"}
+              </p>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={handleCopyShareLink}
+                  className="w-full sketch-button text-left px-3 py-3 bg-background text-sm flex items-center gap-2"
+                  style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
+                >
+                  <Link2 size={14} />
+                  Copy filtered link
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopySnapshot}
+                  className="w-full sketch-button text-left px-3 py-3 bg-background text-sm flex items-center gap-2"
+                  style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
+                >
+                  <ImageDown size={14} />
+                  Copy filtered snapshot
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

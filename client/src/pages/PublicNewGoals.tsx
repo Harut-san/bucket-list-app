@@ -51,14 +51,14 @@ export default function PublicNewGoals() {
           <h2 className="page-heading text-3xl font-bold" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}>
             [NEW_GOALS]
           </h2>
-          <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          <p className="text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Courier Prime', monospace" }}>
             goals added by users
           </p>
         </div>
       </div>
 
       {/* CTA */}
-      <div className="sketch-border-dashed p-4 mb-6 flex items-center justify-between gap-4 flex-wrap">
+      <div className="sketch-border-dashed p-4 mb-6 flex flex-col items-center justify-center gap-3 text-center">
         <p style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600, letterSpacing: "0.02em" }}>
           Log in to add these goals to your personal bucket list!
         </p>

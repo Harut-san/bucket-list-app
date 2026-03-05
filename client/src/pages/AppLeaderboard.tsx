@@ -22,7 +22,9 @@ type LeaderboardTab = "goals" | "users";
 export default function AppLeaderboard() {
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("goals");
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
-  const { data: goalLeaderboard, isLoading: goalsLoading } = trpc.leaderboard.topGoals.useQuery();
+  const { data: goalLeaderboard, isLoading: goalsLoading } = trpc.leaderboard.topGoals.useQuery({
+    year: selectedYear ?? undefined,
+  });
   const { data: userLeaderboard, isLoading: usersLoading } = trpc.leaderboard.topUsers.useQuery({
     year: selectedYear ?? undefined,
   });
@@ -78,32 +80,30 @@ export default function AppLeaderboard() {
           [USERS]
         </button>
       </div>
-      {activeTab === "users" && (
-        <div className="flex items-start gap-2 mb-6 flex-wrap">
-          <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
-            Year:
-          </span>
+      <div className="flex items-start gap-2 mb-6 flex-wrap">
+        <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          Year:
+        </span>
+        <button
+          type="button"
+          onClick={() => setSelectedYear(null)}
+          className={`category-badge transition-colors ${selectedYear === null ? "bg-foreground text-background border-foreground" : ""}`}
+          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+        >
+          All
+        </button>
+        {availableYears.map((year) => (
           <button
+            key={year}
             type="button"
-            onClick={() => setSelectedYear(null)}
-            className={`category-badge transition-colors ${selectedYear === null ? "bg-foreground text-background border-foreground" : ""}`}
+            onClick={() => setSelectedYear(year)}
+            className={`category-badge transition-colors ${selectedYear === year ? "bg-foreground text-background border-foreground" : ""}`}
             style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
           >
-            All
+            {year}
           </button>
-          {availableYears.map((year) => (
-            <button
-              key={year}
-              type="button"
-              onClick={() => setSelectedYear(year)}
-              className={`category-badge transition-colors ${selectedYear === year ? "bg-foreground text-background border-foreground" : ""}`}
-              style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
-            >
-              {year}
-            </button>
-          ))}
-        </div>
-      )}
+        ))}
+      </div>
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16 gap-3">
@@ -152,6 +152,11 @@ export default function AppLeaderboard() {
                 </div>
 
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="text-right mr-2">
+                    <p className="text-[11px] text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                      {selectedYear ? `Year ${selectedYear}` : "All years"}
+                    </p>
+                  </div>
                   <Users size={14} className="text-muted-foreground" />
                   <span className="font-bold" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>
                     {goal.userCount}

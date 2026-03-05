@@ -35,6 +35,16 @@ export default function ShareProfile({ userId }: ShareProfileProps) {
   }
 
   const emoji = normalizeAvatarEmoji(data.avatarEmoji);
+  const search = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const categoryFilter = search?.get("category")?.trim() || null;
+  const yearFilter = Number(search?.get("year") ?? "");
+  const hasYearFilter = Number.isFinite(yearFilter);
+  const filteredGoals = data.goals.filter((goal) => {
+    const categoryMatches = categoryFilter ? goal.category === categoryFilter : true;
+    const yearMatches = hasYearFilter ? new Date(goal.createdAt).getFullYear() === yearFilter : true;
+    return categoryMatches && yearMatches;
+  });
+  const filteredAchievedCount = filteredGoals.filter((goal) => goal.achieved).length;
 
   return (
     <div className="py-4">
@@ -51,13 +61,18 @@ export default function ShareProfile({ userId }: ShareProfileProps) {
               {data.displayName}
             </h2>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
-              {data.achievedCount}/{data.totalCount} goals achieved
+              {filteredAchievedCount}/{filteredGoals.length} goals achieved
             </p>
           </div>
         </div>
+        {(categoryFilter || hasYearFilter) && (
+          <p className="text-xs text-muted-foreground mt-3 leading-relaxed" style={{ fontFamily: "'Courier Prime', monospace" }}>
+            Filters: {hasYearFilter ? `Year ${yearFilter}` : "All years"} · {categoryFilter ?? "All categories"}
+          </p>
+        )}
       </div>
 
-      {data.goals.length === 0 ? (
+      {filteredGoals.length === 0 ? (
         <div className="sketch-border-dashed p-8 text-center">
           <p style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}>
             No goals shared yet
@@ -65,7 +80,7 @@ export default function ShareProfile({ userId }: ShareProfileProps) {
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {data.goals.map((goal) => (
+          {filteredGoals.map((goal) => (
             <div key={goal.id} className="sketch-border p-3 bg-background/60">
               <p
                 className={`font-semibold ${goal.achieved ? "line-through opacity-70" : ""}`}

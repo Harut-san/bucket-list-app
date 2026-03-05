@@ -56,6 +56,15 @@ export async function createUser(input: { email: string; passwordHash: string; n
   return rows[0];
 }
 
+export async function deleteUserAccount(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  await db.delete(bucketItems).where(eq(bucketItems.userId, userId));
+  await db.delete(userSettings).where(eq(userSettings.userId, userId));
+  await db.delete(users).where(eq(users.id, userId));
+}
+
 export async function updateUserLastSignedIn(userId: number) {
   const db = await getDb();
   if (!db) return;
@@ -306,6 +315,47 @@ export async function getCommunityGoalsPage(options: {
   }>;
   const total = Number((totalResult as any)[0]?.[0]?.total ?? 0);
 
+  if (total === 0) {
+    const fallbackConditions = options.category
+      ? sql`WHERE g.category = ${options.category}`
+      : sql``;
+    const fallbackOrderSql =
+      options.sort === "newest"
+        ? sql`ORDER BY g.createdAt DESC, g.addedCount DESC`
+        : sql`ORDER BY g.addedCount DESC, g.createdAt DESC`;
+
+    const fallbackItemsResult = await db.execute(sql`
+      SELECT g.title, g.category, g.addedCount
+      FROM global_goals g
+      ${fallbackConditions}
+      ${fallbackOrderSql}
+      LIMIT ${pageSize} OFFSET ${offset}
+    `);
+
+    const fallbackTotalResult = await db.execute(sql`
+      SELECT COUNT(*) AS total
+      FROM global_goals g
+      ${fallbackConditions}
+    `);
+
+    const fallbackRows = ((fallbackItemsResult as any)[0] ?? []) as Array<{
+      title: string;
+      category: string | null;
+      addedCount: number | string;
+    }>;
+    const fallbackTotal = Number((fallbackTotalResult as any)[0]?.[0]?.total ?? 0);
+
+    return {
+      items: fallbackRows.map((row, index) => ({
+        id: offset + index + 1,
+        title: row.title,
+        category: row.category,
+        addedCount: Number(row.addedCount ?? 0),
+      })),
+      total: fallbackTotal,
+    };
+  }
+
   return {
     items: rows.map((row, index) => ({
       id: offset + index + 1,
@@ -376,8 +426,16 @@ export async function upsertUserSettings(userId: number, data: Partial<InsertUse
 
 // ─── Top Goals Leaderboard ────────────────────────────────────────
 export async function getTopGoals(limit = 100) {
+  return getTopGoalsByYear(limit);
+}
+
+export async function getTopGoalsByYear(limit = 100, year?: number) {
   const db = await getDb();
   if (!db) return [];
+
+  const yearFilterSql = year
+    ? sql`AND YEAR(b.achievedAt) = ${year}`
+    : sql``;
 
   const result = await db.execute(
     sql`SELECT
@@ -388,6 +446,8 @@ export async function getTopGoals(limit = 100) {
       FROM bucket_items b
       LEFT JOIN user_settings us ON us.userId = b.userId
       WHERE b.achieved = 1
+        AND b.achievedAt IS NOT NULL
+        ${yearFilterSql}
         AND b.title IS NOT NULL
         AND TRIM(b.title) <> ''
         AND (us.isPublic IS NULL OR us.isPublic = 1)
