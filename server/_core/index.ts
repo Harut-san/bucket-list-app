@@ -7,7 +7,7 @@ import path from "node:path";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
+import { serveStatic } from "./static";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -46,6 +46,11 @@ async function startServer() {
   );
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
+    const dynamicImport = new Function(
+      "modulePath",
+      "return import(modulePath);"
+    ) as (modulePath: string) => Promise<{ setupVite: typeof import("./vite")["setupVite"] }>;
+    const { setupVite } = await dynamicImport("./vite");
     await setupVite(app, server);
   } else {
     serveStatic(app);
