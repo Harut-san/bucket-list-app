@@ -189,14 +189,14 @@ export default function PublicNewGoals() {
                 return (
                   <div
                     key={`${goal.title}-${goal.category ?? "none"}`}
-                    className="sketch-border p-4 bg-background/60 hover:bg-background/90 transition-colors relative overflow-hidden"
+                    className="sketch-border p-4 bg-background/60 hover:bg-background/90 transition-colors relative overflow-hidden flex items-start gap-3"
                     onClick={() => setPreviewGoal({ title: goal.title, category: goal.category, addedCount: goal.addedCount })}
                   >
                     <div
                       className="absolute left-0 top-0 bottom-0 w-1"
                       style={{ background: color }}
                     />
-                    <div className="pl-3">
+                    <div className="pl-3 flex-1 min-w-0">
                       <p
                         className="font-semibold mb-1 line-clamp-2 text-[0.98rem] md:text-[1.02rem]"
                         title={goal.title}
@@ -222,7 +222,7 @@ export default function PublicNewGoals() {
                       href="/login"
                       onClick={(event) => event.stopPropagation()}
                       onPointerDown={(event) => event.stopPropagation()}
-                      className="ml-3 sketch-button p-2 bg-background hover:bg-foreground hover:text-background transition-colors"
+                      className="flex-shrink-0 sketch-button p-2 bg-background hover:bg-foreground hover:text-background transition-colors"
                       aria-label="Log in to add this goal"
                       title="Log in to add this goal"
                     >

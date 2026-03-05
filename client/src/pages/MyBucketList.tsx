@@ -230,6 +230,24 @@ function GoalForm({ initial, onSave, onCancel, onDelete = null, deleting = false
   const [description, setDescription] = useState(initial?.description ?? "");
   const [category, setCategory] = useState(initial?.category ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [debouncedTitle, setDebouncedTitle] = useState((initial?.title ?? "").trim());
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const suggestionQuery = trpc.globalGoals.list.useQuery(
+    {
+      page: 1,
+      pageSize: 6,
+      sortBy: "popular",
+      sortDirection: "desc",
+      excludeMine: false,
+      search: debouncedTitle,
+    },
+    {
+      enabled: debouncedTitle.length >= 2,
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    }
+  );
+  const suggestions = (suggestionQuery.data?.items ?? []).filter((item) => item.title.trim().length > 0);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -238,6 +256,13 @@ function GoalForm({ initial, onSave, onCancel, onDelete = null, deleting = false
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onCancel]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedTitle(title.trim());
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [title]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -273,14 +298,60 @@ function GoalForm({ initial, onSave, onCancel, onDelete = null, deleting = false
             <label className="block text-xs mb-1 text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
               Goal title *
             </label>
-            <input
-              className="sketch-input w-full px-3 py-2 text-sm"
-              placeholder="e.g. See the Northern Lights"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              autoFocus
-              maxLength={TITLE_MAX_LENGTH}
-            />
+            <div className="relative">
+              <input
+                className="sketch-input w-full px-3 py-2 text-sm"
+                placeholder="e.g. See the Northern Lights"
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  setSuggestionsOpen(true);
+                }}
+                onFocus={() => setSuggestionsOpen(true)}
+                onBlur={() => {
+                  window.setTimeout(() => setSuggestionsOpen(false), 120);
+                }}
+                autoFocus
+                maxLength={TITLE_MAX_LENGTH}
+              />
+              {suggestionsOpen && debouncedTitle.length >= 2 ? (
+                <div className="absolute z-20 mt-1 w-full sketch-border bg-background p-1 max-h-52 overflow-auto">
+                  {suggestionQuery.isLoading ? (
+                    <div className="px-2 py-2 text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                      Loading suggestions...
+                    </div>
+                  ) : suggestions.length === 0 ? (
+                    <div className="px-2 py-2 text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                      No suggestions yet
+                    </div>
+                  ) : (
+                    suggestions.map((item) => (
+                      <button
+                        key={`${item.title}-${item.category ?? "none"}`}
+                        type="button"
+                        className="w-full text-left px-2 py-2 hover:bg-muted rounded-sm transition-colors"
+                        style={{ fontFamily: "'Courier Prime', monospace" }}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setTitle(item.title);
+                          if (!category && item.category) {
+                            setCategory(item.category);
+                          }
+                          setSuggestionsOpen(false);
+                        }}
+                      >
+                        <div className="text-sm text-foreground" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>
+                          {item.title}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {item.category ?? "No category"} · added by {item.addedCount.toLocaleString()} users
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
             <p className="text-xs mt-1 text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
               {title.trim().length}/{TITLE_MAX_LENGTH} chars · min {TITLE_MIN_LENGTH}
             </p>
@@ -963,19 +1034,21 @@ export default function MyBucketList() {
           <p className="text-sm text-muted-foreground mb-6" style={{ fontFamily: "'Courier Prime', monospace" }}>
             Start adding goals you want to achieve in your lifetime
           </p>
-          <button
-            onClick={() => setShowForm(true)}
-            className="sketch-button px-6 py-2 bg-foreground text-background whitespace-nowrap"
-          >
-            Add your first goal -&gt;
-          </button>
-          <button
-            type="button"
-            onClick={() => setQuizOpen(true)}
-            className="sketch-button px-6 py-2 bg-background mt-2"
-          >
-            Quick quiz
-          </button>
+          <div className="inline-flex flex-col items-center gap-3">
+            <button
+              onClick={() => setShowForm(true)}
+              className="sketch-button px-6 py-2 bg-foreground text-background whitespace-nowrap"
+            >
+              Add your first goal -&gt;
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuizOpen(true)}
+              className="sketch-button px-6 py-2 bg-background"
+            >
+              Quick quiz
+            </button>
+          </div>
         </motion.div>
       ) : selectedCategory ? (
         displayItems.length === 0 ? (

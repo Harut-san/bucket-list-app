@@ -33,6 +33,7 @@ export default function PublicShell({ children }: PublicShellProps) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
+  const isAuthPage = location === "/login" || location === "/signup";
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const creditsRef = useRef<HTMLDivElement | null>(null);
 
@@ -109,7 +110,7 @@ export default function PublicShell({ children }: PublicShellProps) {
             </Link>
 
             {/* Desktop auth */}
-            <div className="hidden md:flex flex-col items-end gap-1 w-[104px] shrink-0">
+            <div className={`hidden md:flex flex-col items-end gap-1 w-[104px] shrink-0 ${isAuthPage ? "invisible" : ""}`}>
                 <Link href="/login" className="block w-full">
                   <button
                     className="sketch-button auth-stack-button w-full h-8 px-2 text-xs"
@@ -137,7 +138,7 @@ export default function PublicShell({ children }: PublicShellProps) {
             </div>
 
             {/* Mobile menu button */}
-            <div className="md:hidden relative" ref={mobileMenuRef}>
+            <div className={`md:hidden relative ${isAuthPage ? "invisible" : ""}`} ref={mobileMenuRef}>
               <button
                 className={`sketch-button p-2 bg-background mt-1 hamburger-button ${mobileOpen ? "open" : ""}`}
                 onClick={() => setMobileOpen((open) => !open)}
@@ -211,7 +212,7 @@ export default function PublicShell({ children }: PublicShellProps) {
           </div>
 
           {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-1 mt-4">
+          <nav className={isAuthPage ? "hidden" : "hidden md:flex items-center gap-1 mt-4"}>
             {publicNavItems.map((item) => (
               <Link key={item.href} href={item.href}>
                 <span

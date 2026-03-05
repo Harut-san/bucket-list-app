@@ -316,6 +316,7 @@ export async function getCommunityGoalsPage(options: {
   page: number;
   pageSize: number;
   category?: string;
+  search?: string;
   excludeUserId?: number;
   publicOnly?: boolean;
   sortBy?: "popular" | "createdAt";
@@ -342,6 +343,10 @@ export async function getCommunityGoalsPage(options: {
     conditions.push(sql`(b.category IS NULL OR TRIM(b.category) = '')`);
   } else if (options.category) {
     conditions.push(sql`b.category = ${options.category}`);
+  }
+  if (options.search) {
+    const normalizedSearch = `%${options.search.trim().toLowerCase()}%`;
+    conditions.push(sql`LOWER(TRIM(b.title)) LIKE ${normalizedSearch}`);
   }
 
   const whereSql = sql`WHERE ${sql.join(conditions, sql` AND `)}`;
@@ -391,9 +396,15 @@ export async function getCommunityGoalsPage(options: {
   if (total === 0) {
     const fallbackConditions =
       options.category === "__none__"
-        ? sql`WHERE (g.category IS NULL OR TRIM(g.category) = '')`
+        ? options.search
+          ? sql`WHERE (g.category IS NULL OR TRIM(g.category) = '') AND LOWER(TRIM(g.title)) LIKE ${`%${options.search.trim().toLowerCase()}%`}`
+          : sql`WHERE (g.category IS NULL OR TRIM(g.category) = '')`
         : options.category
-        ? sql`WHERE g.category = ${options.category}`
+        ? options.search
+          ? sql`WHERE g.category = ${options.category} AND LOWER(TRIM(g.title)) LIKE ${`%${options.search.trim().toLowerCase()}%`}`
+          : sql`WHERE g.category = ${options.category}`
+        : options.search
+        ? sql`WHERE LOWER(TRIM(g.title)) LIKE ${`%${options.search.trim().toLowerCase()}%`}`
         : sql``;
     const fallbackOrderSql =
       sortBy === "createdAt"

@@ -1,6 +1,6 @@
 import { trpc } from "@/lib/trpc";
 import { Users, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import UserAvatar from "@/components/UserAvatar";
 import GoalPreviewModal from "@/components/GoalPreviewModal";
 
@@ -25,20 +25,21 @@ export default function PublicLeaderboard() {
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [introStep, setIntroStep] = useState<0 | 1 | 2>(0);
   const [previewGoal, setPreviewGoal] = useState<{ title: string; category?: string | null; users: number } | null>(null);
+  const utils = trpc.useUtils();
   const { data: goalLeaderboard, isLoading: goalsLoading } = trpc.leaderboard.topGoals.useQuery(
     { year: selectedYear ?? undefined },
     {
-      enabled: activeTab === "goals",
       staleTime: 60_000,
       refetchOnWindowFocus: false,
+      placeholderData: (previousData) => previousData,
     }
   );
   const { data: userLeaderboard, isLoading: usersLoading } = trpc.leaderboard.topUsers.useQuery(
     { year: selectedYear ?? undefined },
     {
-      enabled: activeTab === "users",
       staleTime: 60_000,
       refetchOnWindowFocus: false,
+      placeholderData: (previousData) => previousData,
     }
   );
   const { data: availableYears = [] } = trpc.leaderboard.availableYears.useQuery(undefined, {
@@ -55,6 +56,14 @@ export default function PublicLeaderboard() {
       : introStep === 1
       ? "You can add your first goal in under 10 seconds."
       : "Public goals and users update continuously as people complete missions.";
+
+  useEffect(() => {
+    const yearsToWarm = [null, ...availableYears];
+    for (const year of yearsToWarm) {
+      void utils.leaderboard.topGoals.prefetch({ year: year ?? undefined }, { staleTime: 60_000 });
+      void utils.leaderboard.topUsers.prefetch({ year: year ?? undefined }, { staleTime: 60_000 });
+    }
+  }, [availableYears, utils]);
 
   return (
     <div className="py-4">
@@ -113,7 +122,10 @@ export default function PublicLeaderboard() {
         </div>
       </div>
 
-      <div className="sketch-border-dashed p-3 mb-4 text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Courier Prime', monospace" }}>
+      <div
+        className="sketch-border-dashed p-3 mb-4 text-xs text-muted-foreground leading-relaxed"
+        style={{ fontFamily: "'Courier Prime', monospace", background: "#F5EDDF" }}
+      >
         Goals rank by how many public users added them. Users rank by achieved goals (added goals also shown). Year filter applies to both tabs.
       </div>
 

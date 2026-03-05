@@ -146,6 +146,11 @@ export default function Settings() {
   const updateMutation = trpc.settings.update.useMutation({
     onSuccess: () => {
       utils.settings.get.invalidate();
+      utils.leaderboard.topGoals.invalidate();
+      utils.leaderboard.topUsers.invalidate();
+      utils.leaderboard.availableYears.invalidate();
+      utils.leaderboard.usersCount.invalidate();
+      utils.bucketList.stats.invalidate();
       setSaved(true);
       toast.success("Settings saved!");
       setTimeout(() => setSaved(false), 2000);
@@ -512,7 +517,20 @@ export default function Settings() {
                 step={0.01}
                 value={cropZoom}
                 onChange={(event) => setCropZoom(Number(event.target.value))}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                }}
+                onPointerMove={(event) => {
+                  event.stopPropagation();
+                }}
+                onTouchStart={(event) => {
+                  event.stopPropagation();
+                }}
+                onTouchMove={(event) => {
+                  event.stopPropagation();
+                }}
                 className="zoom-range w-full"
+                style={{ touchAction: "none" }}
               />
             </div>
             <div className="flex justify-end gap-2">

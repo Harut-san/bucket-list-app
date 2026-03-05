@@ -257,6 +257,7 @@ export const appRouter = router({
           page: z.number().int().min(1).default(1),
           pageSize: z.number().int().min(1).max(50).default(10),
           category: z.string().max(64).optional(),
+          search: z.string().trim().max(120).optional(),
           excludeMine: z.boolean().default(false),
           sortBy: z.enum(["popular", "createdAt"]).default("popular"),
           sortDirection: z.enum(["asc", "desc"]).default("desc"),
@@ -267,6 +268,7 @@ export const appRouter = router({
         const page = input?.page ?? 1;
         const pageSize = input?.pageSize ?? 10;
         const category = input?.category;
+        const search = input?.search;
         const excludeUserId = input?.excludeMine && ctx.user ? ctx.user.id : undefined;
         const sortBy = input?.sortBy ?? "popular";
         const sortDirection = input?.sortDirection ?? "desc";
@@ -275,6 +277,7 @@ export const appRouter = router({
           page,
           pageSize,
           category,
+          search,
           excludeUserId,
           publicOnly: true,
           sortBy,
