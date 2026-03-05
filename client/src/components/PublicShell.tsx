@@ -19,6 +19,8 @@ function SketchDecoration() {
       {/* Corner marks */}
       <line x1="0" y1="12" x2="12" y2="0" stroke="oklch(0.22 0.02 60)" strokeWidth="1.5" strokeOpacity="0.3" />
       <line x1="0" y1="20" x2="20" y2="0" stroke="oklch(0.22 0.02 60)" strokeWidth="1" strokeOpacity="0.15" />
+      <line x1="100%" y1="98.8%" x2="98.8%" y2="100%" stroke="oklch(0.22 0.02 60)" strokeWidth="1.5" strokeOpacity="0.3" />
+      <line x1="100%" y1="98.2%" x2="98.2%" y2="100%" stroke="oklch(0.22 0.02 60)" strokeWidth="1" strokeOpacity="0.15" />
     </svg>
   );
 }
@@ -80,7 +82,7 @@ export default function PublicShell({ children }: PublicShellProps) {
       <motion.div
         layout
         transition={{ layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] } }}
-        className="w-full max-w-3xl sketch-card thin-typography relative"
+        className="w-full max-w-3xl sketch-card thin-typography relative flex flex-col overflow-hidden"
         style={{ minHeight: "80vh" }}
       >
         <SketchDecoration />
@@ -106,24 +108,8 @@ export default function PublicShell({ children }: PublicShellProps) {
               </div>
             </Link>
 
-            {/* Desktop nav */}
-            <nav className="hidden md:flex flex-1 min-w-0 items-start justify-end gap-2">
-              <div className="flex items-center gap-0.5 min-w-0">
-                {publicNavItems.map((item) => (
-                  <Link key={item.href} href={item.href}>
-                    <span
-                      className={`nav-link px-2 py-1 rounded transition-colors ${
-                        location === item.href ? "active text-foreground" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                      style={{ fontFamily: "'Space Mono', monospace" }}
-                    >
-                      <span className="nav-link-label">{item.label}</span>
-                    </span>
-                  </Link>
-                ))}
-              </div>
-              <div className="w-px h-10 bg-border opacity-60 mt-0.5 mx-1.5 shrink-0" />
-              <div className="flex flex-col items-end gap-1 w-[104px] shrink-0">
+            {/* Desktop auth */}
+            <div className="hidden md:flex flex-col items-end gap-1 w-[104px] shrink-0">
                 <Link href="/login" className="block w-full">
                   <button
                     className="sketch-button auth-stack-button w-full h-8 px-2 text-xs"
@@ -148,8 +134,7 @@ export default function PublicShell({ children }: PublicShellProps) {
                     [SIGN_UP]
                   </button>
                 </Link>
-              </div>
-            </nav>
+            </div>
 
             {/* Mobile menu button */}
             <div className="md:hidden relative" ref={mobileMenuRef}>
@@ -165,56 +150,86 @@ export default function PublicShell({ children }: PublicShellProps) {
 
               <AnimatePresence>
                 {mobileOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 6, scale: 0.98 }}
-                    transition={{ duration: 0.14 }}
-                    className="absolute right-0 top-[calc(100%+0.5rem)] z-[220] w-[17rem] max-w-[88vw]"
-                  >
-                    <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)] space-y-1">
-                      {publicNavItems.map((item) => (
-                        <Link key={item.href} href={item.href}>
+                  <>
+                    <motion.button
+                      type="button"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.12 }}
+                      className="fixed inset-0 z-[210] bg-[oklch(0.18_0.02_60_/_0.35)]"
+                      onClick={() => setMobileOpen(false)}
+                      aria-label="Close mobile menu overlay"
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                      transition={{ duration: 0.14 }}
+                      className="absolute right-0 top-[calc(100%+0.5rem)] z-[220] w-[17rem] max-w-[88vw]"
+                    >
+                      <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)] space-y-[2px]">
+                        {publicNavItems.map((item) => (
+                          <Link key={item.href} href={item.href}>
+                            <button
+                              type="button"
+                              className={`w-full sketch-button text-left px-3 py-2 my-[2px] ${location === item.href ? "bg-foreground text-background border-foreground" : "text-foreground bg-background"}`}
+                              onClick={() => setMobileOpen(false)}
+                              style={{ fontFamily: "'Space Mono', monospace" }}
+                            >
+                              {item.label}
+                            </button>
+                          </Link>
+                        ))}
+                        <div className="pencil-line my-2" />
+                        <Link href="/login" className="block">
                           <button
                             type="button"
-                            className={`w-full sketch-button text-left px-3 py-2 ${location === item.href ? "bg-foreground text-background border-foreground" : "text-foreground bg-background"}`}
                             onClick={() => setMobileOpen(false)}
+                            className="w-full sketch-button text-left px-3 py-2 my-[2px] bg-background"
                             style={{ fontFamily: "'Space Mono', monospace" }}
                           >
-                            {item.label}
+                            Log in
                           </button>
                         </Link>
-                      ))}
-                      <div className="pencil-line my-2" />
-                      <Link href="/login" className="block">
-                        <button
-                          type="button"
-                          onClick={() => setMobileOpen(false)}
-                          className="w-full sketch-button text-left px-3 py-2 bg-background"
-                          style={{ fontFamily: "'Space Mono', monospace" }}
-                        >
-                          Log in
-                        </button>
-                      </Link>
-                      <Link href="/signup" className="block">
-                        <button
-                          type="button"
-                          onClick={() => setMobileOpen(false)}
-                          className="w-full sketch-button text-left px-3 py-2 bg-foreground text-background border-foreground"
-                          style={{ fontFamily: "'Space Mono', monospace" }}
-                        >
-                          Sign up
-                        </button>
-                      </Link>
-                    </div>
-                  </motion.div>
+                        <Link href="/signup" className="block">
+                          <button
+                            type="button"
+                            onClick={() => setMobileOpen(false)}
+                            className="w-full sketch-button text-left px-3 py-2 my-[2px] bg-foreground text-background border-foreground"
+                            style={{ fontFamily: "'Space Mono', monospace" }}
+                          >
+                            Sign up
+                          </button>
+                        </Link>
+                      </div>
+                    </motion.div>
+                  </>
                 )}
               </AnimatePresence>
             </div>
           </div>
 
+          {/* Desktop nav */}
+          <nav className="hidden md:flex items-center gap-1 mt-4">
+            {publicNavItems.map((item) => (
+              <Link key={item.href} href={item.href}>
+                <span
+                  className={`nav-link px-3 py-1 rounded transition-colors ${
+                    location === item.href
+                      ? "active text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  style={{ fontFamily: "'Space Mono', monospace" }}
+                >
+                  <span className="nav-link-label">{item.label}</span>
+                </span>
+              </Link>
+            ))}
+          </nav>
+
           {/* Pencil divider */}
-          <div className="pencil-line mt-3" />
+          <div className="pencil-line mt-5" />
         </div>
 
         {/* Content */}
@@ -225,7 +240,7 @@ export default function PublicShell({ children }: PublicShellProps) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.2 }}
-            className="relative z-10 px-4 md:px-6 pb-6"
+            className="relative z-10 px-4 md:px-6 pb-6 flex-1"
           >
             {children}
           </motion.div>

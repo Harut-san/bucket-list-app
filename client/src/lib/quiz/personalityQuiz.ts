@@ -23,12 +23,16 @@ export type QuizQuestion = {
 
 export type QuizAnswerMap = Record<string, "A" | "B">;
 export type QuizScore = Record<Dimension, number>;
+export type QuizGoalSuggestion = {
+  title: string;
+  category: string;
+};
 
 export type QuizResult = {
   personality_type: PersonalityType;
   cluster: Cluster;
   description: string;
-  bucket_list: string[];
+  bucket_list: QuizGoalSuggestion[];
 };
 
 export const QUIZ_QUESTIONS: QuizQuestion[] = [
@@ -102,54 +106,54 @@ const CLUSTER_DESCRIPTIONS: Record<Cluster, string> = {
   Builder: "You value structure, legacy, and creating dependable experiences for people around you.",
 };
 
-const CLUSTER_BUCKET_LISTS: Record<Cluster, string[]> = {
+const CLUSTER_BUCKET_LISTS: Record<Cluster, QuizGoalSuggestion[]> = {
   Explorer: [
-    "Skydive",
-    "Scuba dive with sharks",
-    "Backpack South America",
-    "Learn to surf",
-    "Climb a volcano",
-    "Explore a cave",
-    "Drive a dune buggy in the desert",
-    "Try white-water rafting",
-    "Go paragliding",
-    "Hike an active glacier",
+    { title: "Skydive", category: "Adventure" },
+    { title: "Scuba dive with sharks", category: "Adventure" },
+    { title: "Backpack South America", category: "Travel" },
+    { title: "Learn to surf", category: "Skills" },
+    { title: "Climb a volcano", category: "Adventure" },
+    { title: "Explore a cave", category: "Adventure" },
+    { title: "Drive a dune buggy in the desert", category: "Adventure" },
+    { title: "Try white-water rafting", category: "Adventure" },
+    { title: "Go paragliding", category: "Adventure" },
+    { title: "Hike an active glacier", category: "Adventure" },
   ],
   Dreamer: [
-    "See the Northern Lights",
-    "Volunteer abroad",
-    "Write a book",
-    "Learn a language",
-    "Attend a cultural festival",
-    "Live abroad for a month",
-    "Keep a year-long travel journal",
-    "Take a photography storytelling trip",
-    "Spend a month studying art history",
-    "Visit a UNESCO heritage site",
+    { title: "See the Northern Lights", category: "Travel" },
+    { title: "Volunteer abroad", category: "Service" },
+    { title: "Write a book", category: "Creative" },
+    { title: "Learn a language", category: "Learning" },
+    { title: "Attend a cultural festival", category: "Travel" },
+    { title: "Live abroad for a month", category: "Travel" },
+    { title: "Keep a year-long travel journal", category: "Creative" },
+    { title: "Take a photography storytelling trip", category: "Creative" },
+    { title: "Spend a month studying art history", category: "Learning" },
+    { title: "Visit a UNESCO heritage site", category: "Travel" },
   ],
   Strategist: [
-    "Launch a startup",
-    "Publish a book",
-    "Visit all 7 continents",
-    "Give a conference talk",
-    "Build a major side project",
-    "Climb a major mountain",
-    "Complete an executive leadership course",
-    "Run a marathon under a target time",
-    "Build a profitable online business",
-    "Mentor 10 aspiring professionals",
+    { title: "Launch a startup", category: "Career" },
+    { title: "Publish a book", category: "Creative" },
+    { title: "Visit all 7 continents", category: "Travel" },
+    { title: "Give a conference talk", category: "Career" },
+    { title: "Build a major side project", category: "Skills" },
+    { title: "Climb a major mountain", category: "Adventure" },
+    { title: "Complete an executive leadership course", category: "Learning" },
+    { title: "Run a marathon under a target time", category: "Fitness" },
+    { title: "Build a profitable online business", category: "Career" },
+    { title: "Mentor 10 aspiring professionals", category: "Service" },
   ],
   Builder: [
-    "Cross-country road trip",
-    "Build a dream home",
-    "Visit world landmarks",
-    "Host a large family celebration",
-    "Create a family tradition",
-    "Start a community project",
-    "Plant and grow a backyard garden",
-    "Document your family history",
-    "Organize an annual neighborhood event",
-    "Renovate a meaningful space",
+    { title: "Cross-country road trip", category: "Travel" },
+    { title: "Build a dream home", category: "Personal" },
+    { title: "Visit world landmarks", category: "Travel" },
+    { title: "Host a large family celebration", category: "Personal" },
+    { title: "Create a family tradition", category: "Personal" },
+    { title: "Start a community project", category: "Service" },
+    { title: "Plant and grow a backyard garden", category: "Personal" },
+    { title: "Document your family history", category: "Personal" },
+    { title: "Organize an annual neighborhood event", category: "Service" },
+    { title: "Renovate a meaningful space", category: "Personal" },
   ],
 };
 
@@ -195,28 +199,33 @@ export function determineCluster(type: PersonalityType): Cluster {
 export function getBucketListRecommendations(
   cluster: Cluster,
   options?: { count?: number; diversify?: boolean }
-): string[] {
+): QuizGoalSuggestion[] {
   const count = options?.count ?? 6;
   const basePool = CLUSTER_BUCKET_LISTS[cluster] ?? [];
-  const chosen = new Set(shuffle(basePool).slice(0, Math.min(count, basePool.length)));
+  const chosen = new Map(
+    shuffle(basePool)
+      .slice(0, Math.min(count, basePool.length))
+      .map((goal) => [goal.title, goal])
+  );
 
   if (options?.diversify && chosen.size > 0) {
     const otherClusters = (Object.keys(CLUSTER_BUCKET_LISTS) as Cluster[]).filter((name) => name !== cluster);
     const donorCluster = otherClusters[Math.floor(Math.random() * otherClusters.length)] ?? null;
     if (donorCluster) {
       const donorPool = shuffle(CLUSTER_BUCKET_LISTS[donorCluster]);
-      const donorItem = donorPool.find((item) => !chosen.has(item));
+      const donorItem = donorPool.find((item) => !chosen.has(item.title));
       if (donorItem) {
-        const current = Array.from(chosen);
+        const current = Array.from(chosen.values());
         current.pop();
-        chosen.clear();
-        for (const entry of current) chosen.add(entry);
-        chosen.add(donorItem);
+        const next = new Map<string, QuizGoalSuggestion>();
+        for (const entry of current) next.set(entry.title, entry);
+        next.set(donorItem.title, donorItem);
+        return Array.from(next.values()).slice(0, count);
       }
     }
   }
 
-  return Array.from(chosen).slice(0, count);
+  return Array.from(chosen.values()).slice(0, count);
 }
 
 export function buildQuizResult(answers: QuizAnswerMap, options?: { diversify?: boolean }): QuizResult {

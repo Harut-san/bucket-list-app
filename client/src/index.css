@@ -340,6 +340,20 @@
     filter: brightness(0.98);
   }
 
+  @keyframes preludeWiggle {
+    0% { transform: translateY(-2px) rotate(0deg); }
+    50% { transform: translateY(-4px) rotate(-0.5deg); }
+    100% { transform: translateY(-2px) rotate(0.5deg); }
+  }
+
+  .leaderboard-prelude-card {
+    will-change: transform;
+  }
+
+  .leaderboard-prelude-card:hover {
+    animation: preludeWiggle 0.9s ease-in-out 1;
+  }
+
   .auth-stack-button:active {
     box-shadow: 1px 1px 0 oklch(0.22 0.02 60 / 0.28);
     filter: brightness(0.95);

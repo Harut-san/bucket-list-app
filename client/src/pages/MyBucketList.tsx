@@ -35,13 +35,14 @@ import {
   GripVertical,
   Plus,
   Pencil,
-  Trash2,
   X,
   Check,
   Loader2,
   Share2,
   Link2,
   ImageDown,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { toast } from "sonner";
 // BucketItem type inline
@@ -335,7 +336,7 @@ function GoalForm({ initial, onSave, onCancel, onDelete = null, deleting = false
                     : "bg-background text-destructive border-destructive"
                 } disabled:opacity-60`}
               >
-                {deleting ? "Deleting..." : confirmDelete ? "Confirm delete" : "Delete goal"}
+                {deleting ? "Deleting..." : confirmDelete ? "Confirm delete" : "Delete"}
               </button>
             )}
             <div className="flex gap-3 justify-end ml-auto">
@@ -352,7 +353,7 @@ function GoalForm({ initial, onSave, onCancel, onDelete = null, deleting = false
               className="sketch-button px-4 py-2 bg-foreground text-background text-sm flex items-center gap-2 disabled:opacity-50"
             >
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-              {initial?.id ? "Save changes" : "Add goal"}
+              {initial?.id ? "Save" : "Add goal"}
             </button>
             </div>
           </div>
@@ -369,11 +370,10 @@ interface GoalItemProps {
   onToggle: (id: number) => void;
   onEdit: (item: BucketItem) => void;
   onOpen: (item: BucketItem) => void;
-  onDelete: (id: number) => void;
   isDragging?: boolean;
 }
 
-function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: GoalItemProps) {
+function GoalItem({ item, onToggle, onEdit, onOpen, isDragging }: GoalItemProps) {
   const sortable = useSortable({
     id: item.id,
     animateLayoutChanges: (args) => {
@@ -395,7 +395,6 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
   };
 
   const color = item.category ? (CATEGORY_COLORS[item.category] ?? "oklch(0.55 0.04 70)") : undefined;
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
     <motion.div
@@ -478,7 +477,7 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 flex-shrink-0">
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -489,22 +488,6 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
           aria-label="Edit goal"
         >
           <Pencil size={13} />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (confirmDelete) {
-              onDelete(item.id);
-              return;
-            }
-            setConfirmDelete(true);
-          }}
-          onPointerDown={(e) => e.stopPropagation()}
-          className={`p-1.5 rounded transition-colors ${confirmDelete ? "bg-destructive text-background" : "hover:bg-destructive/10 text-destructive"}`}
-          aria-label="Delete goal"
-          title={confirmDelete ? "Click again to confirm delete" : "Delete goal"}
-        >
-          {confirmDelete ? <Check size={13} /> : <Trash2 size={13} />}
         </button>
       </div>
     </motion.div>
@@ -538,6 +521,10 @@ export default function MyBucketList() {
   const [goalPreview, setGoalPreview] = useState<GoalPreviewState | null>(null);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [dragOverlayWidth, setDragOverlayWidth] = useState<number | null>(null);
+  const [snapshotPreview, setSnapshotPreview] = useState<{ url: string; blob: Blob } | null>(null);
+  const [snapshotZoom, setSnapshotZoom] = useState(1);
+  const [addingQuizGoalTitles, setAddingQuizGoalTitles] = useState<string[]>([]);
+  const [addedQuizGoalTitles, setAddedQuizGoalTitles] = useState<string[]>([]);
   const displayItems = selectedCategory
     ? items.filter((item) => item.category === selectedCategory)
     : items;
@@ -728,6 +715,8 @@ export default function MyBucketList() {
     setQuizStep(0);
     setQuizAnswers({});
     setQuizResult(null);
+    setAddingQuizGoalTitles([]);
+    setAddedQuizGoalTitles([]);
   }, []);
 
   const handleQuizAnswer = (choice: "A" | "B") => {
@@ -747,9 +736,10 @@ export default function MyBucketList() {
     setAddingQuizSuggestions(true);
     try {
       const results = await Promise.allSettled(
-        quizResult.bucket_list.map((title) =>
+        quizResult.bucket_list.map((goal) =>
           addGoalSilently.mutateAsync({
-            title,
+            title: goal.title,
+            category: goal.category,
           })
         )
       );
@@ -768,6 +758,54 @@ export default function MyBucketList() {
     }
   };
 
+  const handleAddSingleQuizSuggestion = async (goal: { title: string; category: string }) => {
+    const goalKey = goal.title.trim().toLowerCase();
+    if (addingQuizGoalTitles.includes(goalKey) || addedQuizGoalTitles.includes(goalKey)) return;
+    setAddingQuizGoalTitles((prev) => [...prev, goalKey]);
+    try {
+      await addGoalSilently.mutateAsync({
+        title: goal.title,
+        category: goal.category,
+      });
+      await utils.bucketList.list.invalidate();
+      await utils.bucketList.stats.invalidate();
+      setAddedQuizGoalTitles((prev) => [...prev, goalKey]);
+      toast.success("Goal added");
+    } catch {
+      toast.error("Failed to add goal");
+    } finally {
+      setAddingQuizGoalTitles((prev) => prev.filter((entry) => entry !== goalKey));
+    }
+  };
+
+  const handleCloseSnapshotPreview = () => {
+    if (snapshotPreview) {
+      URL.revokeObjectURL(snapshotPreview.url);
+    }
+    setSnapshotPreview(null);
+    setSnapshotZoom(1);
+  };
+
+  const handleConfirmCopySnapshot = async () => {
+    if (!snapshotPreview) return;
+    try {
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": snapshotPreview.blob })]);
+        toast.success("Snapshot copied to clipboard");
+      } else {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(snapshotPreview.blob);
+        link.download = "bucket-list-snapshot.png";
+        link.click();
+        URL.revokeObjectURL(link.href);
+        toast.success("Snapshot downloaded");
+      }
+      handleCloseSnapshotPreview();
+    } catch {
+      toast.error("Failed to copy snapshot");
+    }
+  };
+
   const handleCopySnapshot = async () => {
     try {
       const yearLabel = selectedYear ? `Year ${selectedYear}` : "All years";
@@ -781,22 +819,14 @@ export default function MyBucketList() {
         achievedCount,
         items: shareSnapshotItems,
       });
-
-      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
-        await navigator.clipboard.write([new ClipboardItem({ "image/png": snapshotBlob })]);
-        toast.success("Snapshot copied to clipboard");
-      } else {
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(snapshotBlob);
-        link.download = "bucket-list-snapshot.png";
-        link.click();
-        URL.revokeObjectURL(link.href);
-        toast.success("Snapshot downloaded");
+      setShareOpen(false);
+      if (snapshotPreview) {
+        URL.revokeObjectURL(snapshotPreview.url);
       }
+      setSnapshotPreview({ blob: snapshotBlob, url: URL.createObjectURL(snapshotBlob) });
+      setSnapshotZoom(1);
     } catch {
       toast.error("Failed to create snapshot");
-    } finally {
-      setShareOpen(false);
     }
   };
 
@@ -978,7 +1008,6 @@ export default function MyBucketList() {
                     accentColor: item.category ? CATEGORY_COLORS[item.category] : undefined,
                   })
                 }
-                onDelete={(id) => deleteMutation.mutate({ id })}
               />
             ))}
           </motion.div>
@@ -1012,7 +1041,6 @@ export default function MyBucketList() {
                       accentColor: item.category ? CATEGORY_COLORS[item.category] : undefined,
                     })
                   }
-                  onDelete={(id) => deleteMutation.mutate({ id })}
                 />
               ))}
             </motion.div>
@@ -1167,19 +1195,36 @@ export default function MyBucketList() {
                 </div>
               ) : (
                 <div>
-                  <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
-                    Type: {quizResult.personality_type} · Cluster: {quizResult.cluster}
-                  </p>
                   <p className="text-sm mb-3 mt-2" style={{ fontFamily: "'Courier Prime', monospace" }}>
                     {quizResult.description}
                   </p>
-                  <pre className="sketch-border-dashed bg-background/70 p-2 text-[11px] overflow-x-auto mb-3" style={{ fontFamily: "'Courier Prime', monospace" }}>
-                    {JSON.stringify(quizResult, null, 2)}
-                  </pre>
                   <div className="space-y-2 mb-4">
                     {quizResult.bucket_list.map((goal) => (
-                      <div key={goal} className="sketch-border px-3 py-2 bg-background/70">
-                        <p style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>{goal}</p>
+                      <div key={goal.title} className="sketch-border px-3 py-2 bg-background/70 flex items-start justify-between gap-3">
+                        <div>
+                          <p style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>{goal.title}</p>
+                          <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                            {goal.category}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="sketch-button px-3 py-1.5 bg-background text-xs disabled:opacity-50"
+                          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
+                          disabled={
+                            addingQuizGoalTitles.includes(goal.title.trim().toLowerCase()) ||
+                            addedQuizGoalTitles.includes(goal.title.trim().toLowerCase()) ||
+                            items.some((item) => item.title.trim().toLowerCase() === goal.title.trim().toLowerCase())
+                          }
+                          onClick={() => void handleAddSingleQuizSuggestion(goal)}
+                        >
+                          {addingQuizGoalTitles.includes(goal.title.trim().toLowerCase())
+                            ? "Adding..."
+                            : addedQuizGoalTitles.includes(goal.title.trim().toLowerCase()) ||
+                              items.some((item) => item.title.trim().toLowerCase() === goal.title.trim().toLowerCase())
+                            ? "Added"
+                            : "Add"}
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1264,6 +1309,77 @@ export default function MyBucketList() {
                   onClick={handleCopySnapshot}
                   className="w-full sketch-button text-left px-3 py-3 bg-background text-sm flex items-center gap-2"
                   style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
+                >
+                  <ImageDown size={14} />
+                  Copy snapshot
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+      {snapshotPreview &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[125] flex items-center justify-center p-4"
+            style={{ background: "oklch(0.18 0.02 60 / 0.55)" }}
+            onClick={handleCloseSnapshotPreview}
+          >
+            <div
+              className="sketch-card w-full max-w-3xl p-4"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h3 style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.04em", fontSize: "1.25rem" }}>
+                  Snapshot preview
+                </h3>
+                <button
+                  type="button"
+                  onClick={handleCloseSnapshotPreview}
+                  className="sketch-button h-9 w-9 p-0 bg-background flex items-center justify-center leading-none"
+                  aria-label="Close snapshot preview"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+              <div className="mb-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  className="sketch-button px-3 py-1.5 bg-background"
+                  onClick={() => setSnapshotZoom((zoom) => Math.max(0.5, Number((zoom - 0.1).toFixed(2))))}
+                >
+                  <ZoomOut size={14} />
+                </button>
+                <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                  Zoom {Math.round(snapshotZoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  className="sketch-button px-3 py-1.5 bg-background"
+                  onClick={() => setSnapshotZoom((zoom) => Math.min(2.5, Number((zoom + 0.1).toFixed(2))))}
+                >
+                  <ZoomIn size={14} />
+                </button>
+              </div>
+              <div className="sketch-border bg-background/70 p-3 max-h-[65vh] overflow-auto flex justify-center">
+                <img
+                  src={snapshotPreview.url}
+                  alt="Bucket list snapshot preview"
+                  style={{ transform: `scale(${snapshotZoom})`, transformOrigin: "top center", maxWidth: "100%", height: "auto" }}
+                />
+              </div>
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseSnapshotPreview}
+                  className="sketch-button px-4 py-2 bg-background"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmCopySnapshot()}
+                  className="sketch-button px-4 py-2 bg-foreground text-background flex items-center gap-2"
                 >
                   <ImageDown size={14} />
                   Copy snapshot

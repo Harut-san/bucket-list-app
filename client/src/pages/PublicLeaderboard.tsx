@@ -1,7 +1,6 @@
 import { trpc } from "@/lib/trpc";
 import { Users, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import UserAvatar from "@/components/UserAvatar";
 import GoalPreviewModal from "@/components/GoalPreviewModal";
 
@@ -50,6 +49,12 @@ export default function PublicLeaderboard() {
   const isLoading = activeTab === "goals" ? goalsLoading : usersLoading;
   const data = activeTab === "goals" ? goalLeaderboard : userLeaderboard;
   const introCtaHref = introStep === 1 ? "/login" : "/signup";
+  const introMessage =
+    introStep === 0
+      ? "Want to appear on the leaderboard? Start your bucket list today."
+      : introStep === 1
+      ? "You can add your first goal in under 10 seconds."
+      : "Public goals and users update continuously as people complete missions.";
 
   return (
     <div className="py-4">
@@ -74,78 +79,62 @@ export default function PublicLeaderboard() {
             { title: "Claim one mission", body: "Add your first goal in 10s", cta: "Claim" },
             { title: "Compete live", body: "Climb goals + user leaderboard", cta: "Compete" },
           ].map((card, index) => (
-            <motion.button
+            <button
               key={card.title}
               type="button"
               onClick={() => {
                 setIntroStep(index as 0 | 1 | 2);
               }}
-              whileTap={{ scale: 0.98 }}
-              className={`sketch-button relative text-left p-3 transition-all ${introStep === index ? "text-background" : "bg-background"}`}
+              className={`sketch-button leaderboard-prelude-card relative text-left p-3 ${
+                introStep === index ? "bg-background border-foreground text-foreground" : "bg-background"
+              }`}
             >
-              {introStep === index && (
-                <motion.span
-                  layoutId="intro-active-card"
-                  className="absolute inset-0 rounded-[6px] bg-foreground"
-                  transition={{ type: "spring", stiffness: 380, damping: 32 }}
-                />
-              )}
               <p className="text-sm" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>{card.title}</p>
               <p className="text-xs opacity-80 mt-1" style={{ fontFamily: "'Courier Prime', monospace" }}>{card.body}</p>
               <span className="text-xs mt-2 block" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>[{card.cta}]</span>
-            </motion.button>
+            </button>
           ))}
         </div>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={introStep}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.16 }}
-            className="grid w-full gap-3 sm:grid-cols-[1fr_auto] sm:items-center"
+        <div className="grid w-full gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+          <p
+            className="text-sm min-h-[42px] flex items-center"
+            style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600, letterSpacing: "0.02em" }}
           >
-            <p
-              className="text-sm min-h-[42px] flex items-center"
-              style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600, letterSpacing: "0.02em" }}
+            {introMessage}
+          </p>
+          <a href={introCtaHref}>
+            <button
+              className="sketch-button px-4 py-1.5 bg-foreground text-background text-sm min-w-[150px]"
+              style={{ fontFamily: "'Space Mono', monospace" }}
             >
-              {introStep === 0 && "Want to appear on the leaderboard? Start your bucket list today."}
-              {introStep === 1 && "You can add your first goal in under 10 seconds."}
-              {introStep === 2 && "Public goals and users update continuously as people complete missions."}
-            </p>
-            <a href={introCtaHref}>
-              <button
-                className="sketch-button px-4 py-1.5 bg-foreground text-background text-sm min-w-[150px]"
-                style={{ fontFamily: "'Space Mono', monospace" }}
-              >
-                {introStep === 2 ? "Join the board ->" : "Get started ->"}
-              </button>
-            </a>
-          </motion.div>
-        </AnimatePresence>
+              {introStep === 2 ? "Join the board ->" : "Get started ->"}
+            </button>
+          </a>
+        </div>
+      </div>
+
+      <div className="sketch-border-dashed p-3 mb-4 text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: "'Courier Prime', monospace" }}>
+        Goals rank by how many public users added them. Users rank by achieved goals (added goals also shown). Year filter applies to both tabs.
       </div>
 
       {/* Tab buttons */}
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setActiveTab("goals")}
-          className={`sketch-button px-4 py-2 transition-colors ${activeTab === "goals" ? "bg-foreground text-background border-foreground" : "bg-background text-foreground"}`}
+          className={`sketch-button px-4 py-2 ${activeTab === "goals" ? "bg-foreground text-background border-foreground" : "bg-background text-foreground"}`}
           style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
         >
           [GOALS]
         </button>
         <button
           onClick={() => setActiveTab("users")}
-          className={`sketch-button px-4 py-2 transition-colors ${activeTab === "users" ? "bg-foreground text-background border-foreground" : "bg-background text-foreground"}`}
+          className={`sketch-button px-4 py-2 ${activeTab === "users" ? "bg-foreground text-background border-foreground" : "bg-background text-foreground"}`}
           style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
         >
           [USERS]
         </button>
       </div>
       <div className="flex items-start gap-2 mb-6 flex-wrap">
-        <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
-          Year:
-        </span>
         <button
           type="button"
           onClick={() => setSelectedYear(null)}
@@ -214,19 +203,19 @@ export default function PublicLeaderboard() {
                   )}
                 </div>
 
-                <div className="w-full md:w-auto flex items-center justify-between md:justify-end gap-2 md:flex-shrink-0">
-                  <div className="text-left md:text-right md:mr-2">
+                <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+                  <div className="text-right">
                     <p className="text-[11px] text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
                       {selectedYear ? `Year ${selectedYear}` : "All years"}
                     </p>
+                    <p className="text-xs inline-flex items-center justify-end gap-1 w-full" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                      <Users size={14} className="text-muted-foreground" />
+                      <span className="font-bold text-foreground" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>
+                        {goal.userCount}
+                      </span>
+                      <span className="text-muted-foreground">users</span>
+                    </p>
                   </div>
-                  <Users size={14} className="text-muted-foreground" />
-                  <span className="font-bold" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>
-                    {goal.userCount}
-                  </span>
-                  <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
-                    users
-                  </span>
                 </div>
               </div>
             );

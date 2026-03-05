@@ -41,9 +41,12 @@ export default function GoalPreviewModal({
       onClick={onClose}
     >
       <div
-        className="sketch-card w-full max-w-md p-4 relative"
+        className="sketch-card w-full max-w-md p-4 relative overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
+        {accentColor && (
+          <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: accentColor }} />
+        )}
         <button
           type="button"
           onClick={onClose}
@@ -77,9 +80,11 @@ export default function GoalPreviewModal({
 
         <div className="pencil-line my-3" />
 
-        <p className="text-sm leading-relaxed break-words" style={{ fontFamily: "'Courier Prime', monospace" }}>
-          {description?.trim() || "No additional details available."}
-        </p>
+        {description?.trim() ? (
+          <p className="text-sm leading-relaxed break-words" style={{ fontFamily: "'Courier Prime', monospace" }}>
+            {description.trim()}
+          </p>
+        ) : null}
 
         {meta && (
           <p className="text-xs mt-3 text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>

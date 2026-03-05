@@ -29,6 +29,13 @@
       "when": 1772661000000,
       "tag": "0003_avatar_image",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1772757000000,
+      "tag": "0004_new_goals_indexes",
+      "breakpoints": true
     }
   ]
 }

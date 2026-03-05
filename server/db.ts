@@ -281,7 +281,7 @@ export async function getLeaderboard(limit = 100) {
       FROM users u
       LEFT JOIN bucket_items b ON b.userId = u.id
       LEFT JOIN user_settings us ON us.userId = u.id
-      WHERE (us.isPublic IS NULL OR us.isPublic = 1)
+      WHERE COALESCE(us.isPublic, 1) = 1
       GROUP BY u.id, u.name, u.email
       HAVING COUNT(CASE WHEN b.achieved = 1 THEN 1 END) > 0
       ORDER BY achievedCount DESC, totalCount ASC
@@ -318,7 +318,8 @@ export async function getCommunityGoalsPage(options: {
   category?: string;
   excludeUserId?: number;
   publicOnly?: boolean;
-  sort?: "popular" | "newest";
+  sortBy?: "popular" | "createdAt";
+  sortDirection?: "asc" | "desc";
 }) {
   const db = await getDb();
   if (!db) {
@@ -332,20 +333,28 @@ export async function getCommunityGoalsPage(options: {
   const conditions = [sql`b.title IS NOT NULL`, sql`TRIM(b.title) <> ''`];
 
   if (options.publicOnly !== false) {
-    conditions.push(sql`(us.isPublic IS NULL OR us.isPublic = 1)`);
+    conditions.push(sql`COALESCE(us.isPublic, 1) = 1`);
   }
   if (options.excludeUserId != null) {
     conditions.push(sql`b.userId <> ${options.excludeUserId}`);
   }
-  if (options.category) {
+  if (options.category === "__none__") {
+    conditions.push(sql`(b.category IS NULL OR TRIM(b.category) = '')`);
+  } else if (options.category) {
     conditions.push(sql`b.category = ${options.category}`);
   }
 
   const whereSql = sql`WHERE ${sql.join(conditions, sql` AND `)}`;
+  const sortBy = options.sortBy ?? "popular";
+  const sortDirection = options.sortDirection ?? "desc";
+  const latestDirectionSql = sortDirection === "asc" ? sql`ASC` : sql`DESC`;
+  const popularityDirectionSql = sortDirection === "asc" ? sql`ASC` : sql`DESC`;
+  const titleDirectionSql = sortDirection === "asc" ? sql`ASC` : sql`DESC`;
+
   const orderSql =
-    options.sort === "newest"
-      ? sql`ORDER BY latestAt DESC, addedCount DESC`
-      : sql`ORDER BY addedCount DESC, latestAt DESC`;
+    sortBy === "createdAt"
+      ? sql`ORDER BY latestAt ${latestDirectionSql}, addedCount DESC, b.title ASC`
+      : sql`ORDER BY addedCount ${popularityDirectionSql}, latestAt DESC, b.title ${titleDirectionSql}`;
 
   const itemsResult = await db.execute(sql`
     SELECT
@@ -380,13 +389,16 @@ export async function getCommunityGoalsPage(options: {
   const total = Number((totalResult as any)[0]?.[0]?.total ?? 0);
 
   if (total === 0) {
-    const fallbackConditions = options.category
-      ? sql`WHERE g.category = ${options.category}`
-      : sql``;
+    const fallbackConditions =
+      options.category === "__none__"
+        ? sql`WHERE (g.category IS NULL OR TRIM(g.category) = '')`
+        : options.category
+        ? sql`WHERE g.category = ${options.category}`
+        : sql``;
     const fallbackOrderSql =
-      options.sort === "newest"
-        ? sql`ORDER BY g.createdAt DESC, g.addedCount DESC`
-        : sql`ORDER BY g.addedCount DESC, g.createdAt DESC`;
+      sortBy === "createdAt"
+        ? sql`ORDER BY g.createdAt ${latestDirectionSql}, g.addedCount DESC, g.title ASC`
+        : sql`ORDER BY g.addedCount ${popularityDirectionSql}, g.createdAt DESC, g.title ${titleDirectionSql}`;
 
     const fallbackItemsResult = await db.execute(sql`
       SELECT g.title, g.category, g.addedCount
@@ -515,7 +527,7 @@ export async function getTopGoalsByYear(limit = 100, year?: number) {
         ${yearFilterSql}
         AND b.title IS NOT NULL
         AND TRIM(b.title) <> ''
-        AND (us.isPublic IS NULL OR us.isPublic = 1)
+        AND COALESCE(us.isPublic, 1) = 1
       GROUP BY LOWER(TRIM(b.title))
       ORDER BY userCount DESC, title ASC
       LIMIT ${limit}`
@@ -544,7 +556,7 @@ export async function getTopUsers(limit = 100) {
       FROM users u
       LEFT JOIN bucket_items b ON b.userId = u.id
       LEFT JOIN user_settings us ON us.userId = u.id
-      WHERE (us.isPublic IS NULL OR us.isPublic = 1)
+      WHERE COALESCE(us.isPublic, 1) = 1
       GROUP BY u.id, u.name, u.email
       HAVING COUNT(b.id) > 0
       ORDER BY achievedCount DESC, totalCount DESC
@@ -575,7 +587,7 @@ export async function getPublicUsersCount() {
       FROM users u
       LEFT JOIN user_settings us ON us.userId = u.id
       LEFT JOIN bucket_items b ON b.userId = u.id
-      WHERE (us.isPublic IS NULL OR us.isPublic = 1)
+      WHERE COALESCE(us.isPublic, 1) = 1
         AND b.id IS NOT NULL`
   );
 
@@ -598,7 +610,7 @@ export async function getTopUsersByYear(limit = 100, year?: number) {
       FROM users u
       LEFT JOIN bucket_items b ON b.userId = u.id
       LEFT JOIN user_settings us ON us.userId = u.id
-      WHERE (us.isPublic IS NULL OR us.isPublic = 1)
+      WHERE COALESCE(us.isPublic, 1) = 1
       GROUP BY u.id, u.name, u.email
       HAVING (
         COUNT(CASE WHEN EXTRACT(YEAR FROM b.createdAt) = ${year} THEN 1 END) > 0
@@ -633,14 +645,14 @@ export async function getLeaderboardAvailableYears() {
         SELECT EXTRACT(YEAR FROM b.createdAt) AS year
         FROM bucket_items b
         LEFT JOIN user_settings us ON us.userId = b.userId
-        WHERE (us.isPublic IS NULL OR us.isPublic = 1)
+        WHERE COALESCE(us.isPublic, 1) = 1
         UNION
         SELECT EXTRACT(YEAR FROM b.achievedAt) AS year
         FROM bucket_items b
         LEFT JOIN user_settings us ON us.userId = b.userId
         WHERE b.achieved = 1
           AND b.achievedAt IS NOT NULL
-          AND (us.isPublic IS NULL OR us.isPublic = 1)
+          AND COALESCE(us.isPublic, 1) = 1
       ) yr
       WHERE yr.year IS NOT NULL
       ORDER BY yr.year DESC`

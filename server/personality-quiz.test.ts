@@ -47,7 +47,7 @@ describe("personality quiz", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.42);
     const list = getBucketListRecommendations("Dreamer", { count: 6 });
     expect(list).toHaveLength(6);
-    expect(new Set(list).size).toBe(6);
+    expect(new Set(list.map((goal) => goal.title)).size).toBe(6);
     vi.restoreAllMocks();
   });
 

@@ -108,6 +108,21 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
+function SketchDecoration() {
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ zIndex: 0 }}
+    >
+      <line x1="0" y1="12" x2="12" y2="0" stroke="oklch(0.22 0.02 60)" strokeWidth="1.5" strokeOpacity="0.3" />
+      <line x1="0" y1="20" x2="20" y2="0" stroke="oklch(0.22 0.02 60)" strokeWidth="1" strokeOpacity="0.15" />
+      <line x1="100%" y1="98.8%" x2="98.8%" y2="100%" stroke="oklch(0.22 0.02 60)" strokeWidth="1.5" strokeOpacity="0.3" />
+      <line x1="100%" y1="98.2%" x2="98.2%" y2="100%" stroke="oklch(0.22 0.02 60)" strokeWidth="1" strokeOpacity="0.15" />
+    </svg>
+  );
+}
+
 export default function AppShell({ children }: AppShellProps) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -224,6 +239,7 @@ export default function AppShell({ children }: AppShellProps) {
         className="w-full max-w-3xl sketch-card thin-typography relative flex flex-col overflow-hidden"
         style={{ minHeight: "80vh" }}
       >
+        <SketchDecoration />
         {/* Header */}
         <div className="relative z-30 px-4 md:px-6 pt-6 pb-4">
           <div className="flex items-start justify-between gap-4 mb-2">
@@ -235,6 +251,12 @@ export default function AppShell({ children }: AppShellProps) {
                   style={{ fontFamily: "'Space Mono', monospace", color: "oklch(0.18 0.02 60)", fontWeight: 700 }}
                 >
                   [BUCKET_LIST]
+                </span>
+                <span
+                  className="app-brand-subtitle text-xs tracking-widest uppercase opacity-60"
+                  style={{ fontFamily: "'Courier Prime', monospace", color: "oklch(0.35 0.04 70)" }}
+                >
+                  your life goals
                 </span>
               </div>
             </Link>
@@ -344,14 +366,25 @@ export default function AppShell({ children }: AppShellProps) {
 
               <AnimatePresence>
                 {mobileOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 6, scale: 0.98 }}
-                    transition={{ duration: 0.14 }}
-                    className="absolute right-0 top-[calc(100%+0.5rem)] z-[220] w-[18rem] max-w-[90vw]"
-                  >
-                    <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)]">
+                  <>
+                    <motion.button
+                      type="button"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.12 }}
+                      className="fixed inset-0 z-[210] bg-[oklch(0.18_0.02_60_/_0.35)]"
+                      onClick={() => setMobileOpen(false)}
+                      aria-label="Close mobile menu overlay"
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                      transition={{ duration: 0.14 }}
+                      className="absolute right-0 top-[calc(100%+0.5rem)] z-[220] w-[18rem] max-w-[90vw]"
+                    >
+                      <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)]">
                       <div className="px-3 py-2">
                         <p className="text-base leading-none truncate" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>
                           {displayName}
@@ -363,15 +396,24 @@ export default function AppShell({ children }: AppShellProps) {
                       <div className="pencil-line my-1" />
                       {stats && (
                         <div className="px-2 pb-2">
-                          <ProgressBadge total={stats.total} achieved={stats.achieved} rank={stats.rank} compact />
+                          <ProgressBadge
+                            total={stats.total}
+                            achieved={stats.achieved}
+                            rank={stats.rank}
+                            compact
+                            onRankClick={() => {
+                              setMobileOpen(false);
+                              setRankInsightsOpen(true);
+                            }}
+                          />
                         </div>
                       )}
-                      <div className="space-y-1">
+                      <div className="space-y-[2px]">
                         {appNavItems.map((item) => (
                           <Link key={item.href} href={item.href}>
                             <button
                               type="button"
-                              className={`w-full sketch-button text-left px-3 py-2 ${
+                              className={`w-full sketch-button text-left px-3 py-2 my-[2px] ${
                                 location === item.href ? "bg-foreground text-background border-foreground" : "text-foreground bg-background"
                               }`}
                               onClick={() => setMobileOpen(false)}
@@ -383,12 +425,12 @@ export default function AppShell({ children }: AppShellProps) {
                         ))}
                       </div>
                       <div className="pencil-line my-2" />
-                      <div className="space-y-1 pt-1">
+                      <div className="space-y-[2px] pt-1">
                         <Link href="/app/settings">
                           <button
                             type="button"
                             onClick={() => setMobileOpen(false)}
-                            className="w-full sketch-button text-left px-3 py-2 transition-colors flex items-center gap-2 bg-background"
+                            className="w-full sketch-button text-left px-3 py-2 my-[2px] transition-colors flex items-center gap-2 bg-background"
                             style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
                           >
                             <Settings size={15} />
@@ -401,15 +443,16 @@ export default function AppShell({ children }: AppShellProps) {
                             setMobileOpen(false);
                             logoutMutation.mutate();
                           }}
-                          className="w-full sketch-button text-left px-3 py-2 text-destructive transition-colors flex items-center gap-2 bg-background hover:bg-destructive/10"
+                          className="w-full sketch-button text-left px-3 py-2 my-[2px] text-destructive transition-colors flex items-center gap-2 bg-background hover:bg-destructive/10"
                           style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
                         >
                           <LogOut size={15} />
                           Log out
                         </button>
                       </div>
-                    </div>
-                  </motion.div>
+                      </div>
+                    </motion.div>
+                  </>
                 )}
               </AnimatePresence>
             </div>

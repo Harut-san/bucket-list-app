@@ -258,7 +258,8 @@ export const appRouter = router({
           pageSize: z.number().int().min(1).max(50).default(10),
           category: z.string().max(64).optional(),
           excludeMine: z.boolean().default(false),
-          sort: z.enum(["popular", "newest"]).optional(),
+          sortBy: z.enum(["popular", "createdAt"]).default("popular"),
+          sortDirection: z.enum(["asc", "desc"]).default("desc"),
         }).optional()
       )
       .query(async ({ ctx, input }) => {
@@ -267,7 +268,8 @@ export const appRouter = router({
         const pageSize = input?.pageSize ?? 10;
         const category = input?.category;
         const excludeUserId = input?.excludeMine && ctx.user ? ctx.user.id : undefined;
-        const sort = input?.sort ?? "popular";
+        const sortBy = input?.sortBy ?? "popular";
+        const sortDirection = input?.sortDirection ?? "desc";
 
         const result = await getCommunityGoalsPage({
           page,
@@ -275,7 +277,8 @@ export const appRouter = router({
           category,
           excludeUserId,
           publicOnly: true,
-          sort,
+          sortBy,
+          sortDirection,
         });
 
         return {
@@ -307,13 +310,17 @@ export const appRouter = router({
           bio: z.string().max(500).nullable().optional(),
           avatarEmoji: z.string().max(32).optional(),
           avatarImageUrl: z.string().max(AVATAR_IMAGE_URL_MAX_LENGTH).nullable().optional(),
-          isPublic: z.boolean().optional(),
+          isPublic: z.union([z.boolean(), z.number().int().min(0).max(1)]).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         return upsertUserSettings(ctx.user.id, {
           ...input,
           bio: input.bio ?? undefined,
+          isPublic:
+            input.isPublic === undefined
+              ? undefined
+              : Boolean(input.isPublic),
           avatarEmoji:
             input.avatarEmoji === undefined
               ? undefined

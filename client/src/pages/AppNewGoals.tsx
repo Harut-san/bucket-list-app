@@ -15,9 +15,11 @@ const CATEGORY_COLORS: Record<string, string> = {
   Career: "oklch(0.45 0.08 60)",
   Service: "oklch(0.65 0.1 185)",
   Personal: "oklch(0.72 0.14 20)",
+  Other: "oklch(0.55 0.04 70)",
 };
 
-const ALL_CATEGORIES = [
+const ALL_CATEGORIES: Array<{ label: string; value: string | null }> = [
+  { label: "All", value: null },
   "Travel",
   "Adventure",
   "Skills",
@@ -28,12 +30,16 @@ const ALL_CATEGORIES = [
   "Career",
   "Service",
   "Personal",
-];
+  "Other",
+].map((entry) =>
+  typeof entry === "string" ? { label: entry, value: entry } : entry
+).concat({ label: "None", value: "__none__" });
 
 export default function AppNewGoals() {
   const utils = trpc.useUtils();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [sort, setSort] = useState<"popular" | "newest">("popular");
+  const [sortBy, setSortBy] = useState<"popular" | "createdAt">("popular");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [confirmRemoveGoalKey, setConfirmRemoveGoalKey] = useState<string | null>(null);
   const [previewGoal, setPreviewGoal] = useState<{ title: string; category?: string | null; addedCount: number } | null>(null);
@@ -43,7 +49,8 @@ export default function AppNewGoals() {
     pageSize,
     category: selectedCategory ?? undefined,
     excludeMine: false,
-    sort,
+    sortBy,
+    sortDirection,
   });
   const { data: myItems } = trpc.bucketList.list.useQuery();
 
@@ -117,62 +124,87 @@ export default function AppNewGoals() {
 
       {/* Category filters - always visible */}
       <div className="flex flex-wrap gap-2 mb-5">
-        <button
-          className={`category-badge cursor-pointer transition-colors ${
-            selectedCategory === null ? "bg-foreground text-background border-foreground" : ""
-          }`}
-          onClick={() => {
-            setSelectedCategory(null);
-            setPage(1);
-          }}
-          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
-        >
-          All
-        </button>
         {ALL_CATEGORIES.map((cat) => {
           return (
             <button
-              key={cat}
+              key={cat.label}
               className={`category-badge cursor-pointer transition-colors ${
-                selectedCategory === cat ? "bg-foreground text-background border-foreground" : ""
+                selectedCategory === cat.value ? "bg-foreground text-background border-foreground" : ""
               }`}
               onClick={() => {
-                setSelectedCategory(cat);
+                setSelectedCategory(cat.value);
                 setPage(1);
               }}
               style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
             >
-              {cat}
+              {cat.label}
             </button>
           );
         })}
       </div>
 
-      <div className="flex items-center gap-2 mb-5">
-        <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
-          Sort:
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        <span className="text-xs text-muted-foreground ml-1" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          Popular
         </span>
         <button
           type="button"
-          className={`category-badge transition-colors ${sort === "popular" ? "bg-foreground text-background border-foreground" : ""}`}
+          className={`category-badge transition-colors ${
+            sortBy === "popular" && sortDirection === "desc" ? "bg-foreground text-background border-foreground" : ""
+          }`}
           onClick={() => {
-            setSort("popular");
+            setSortBy("popular");
+            setSortDirection("desc");
             setPage(1);
           }}
           style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
         >
-          Popular
+          Most
         </button>
         <button
           type="button"
-          className={`category-badge transition-colors ${sort === "newest" ? "bg-foreground text-background border-foreground" : ""}`}
+          className={`category-badge transition-colors ${
+            sortBy === "popular" && sortDirection === "asc" ? "bg-foreground text-background border-foreground" : ""
+          }`}
           onClick={() => {
-            setSort("newest");
+            setSortBy("popular");
+            setSortDirection("asc");
+            setPage(1);
+          }}
+          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+        >
+          Least
+        </button>
+        <span className="text-xs text-muted-foreground ml-1" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          Date
+        </span>
+        <button
+          type="button"
+          className={`category-badge transition-colors ${
+            sortBy === "createdAt" && sortDirection === "desc" ? "bg-foreground text-background border-foreground" : ""
+          }`}
+          onClick={() => {
+            setSortBy("createdAt");
+            setSortDirection("desc");
             setPage(1);
           }}
           style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
         >
           Newest
+        </button>
+        <button
+          type="button"
+          className={`category-badge transition-colors ${
+            sortBy === "createdAt" && sortDirection === "asc" ? "bg-foreground text-background border-foreground" : ""
+          }`}
+          onClick={() => {
+            setSortBy("createdAt");
+            setSortDirection("asc");
+            setPage(1);
+          }}
+          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+        >
+          Oldest
         </button>
       </div>
 
