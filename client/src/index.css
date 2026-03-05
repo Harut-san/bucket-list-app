@@ -389,6 +389,16 @@
     transition: color 0.15s ease;
   }
 
+  .drag-zone {
+    width: 2.8rem;
+    min-height: 2.2rem;
+    border-radius: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: oklch(0.95 0.015 80);
+  }
+
   .drag-handle:active {
     cursor: grabbing;
   }
@@ -447,6 +457,28 @@
     transform: rotate(2deg);
     box-shadow: 8px 8px 0 oklch(0.22 0.02 60 / 0.25);
     z-index: 50;
+  }
+
+  .confetti-container {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 999;
+    overflow: visible;
+  }
+
+  .confetti-piece {
+    position: absolute;
+    width: 8px;
+    height: 12px;
+    border-radius: 2px;
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    animation-name: confetti-burst;
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.2, 1);
+    animation-fill-mode: forwards;
   }
 
   .sketch-progress {
@@ -546,6 +578,20 @@
     100% {
       opacity: 0;
       transform: translate(var(--spark-x), var(--spark-y)) scale(1.05) rotate(14deg);
+    }
+  }
+
+  @keyframes confetti-burst {
+    0% {
+      opacity: 0;
+      transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8);
+    }
+    10% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)) scale(1);
     }
   }
 

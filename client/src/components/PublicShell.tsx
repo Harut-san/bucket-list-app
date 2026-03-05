@@ -160,7 +160,7 @@ export default function PublicShell({ children }: PublicShellProps) {
                   ))}
                   <div className="pencil-line my-2" />
                   <Link href="/login" className="block">
-                    <button
+                  <button
                       type="button"
                       onClick={() => setMobileOpen(false)}
                       className="sketch-button auth-stack-button w-full h-8 px-2 text-xs mb-2"

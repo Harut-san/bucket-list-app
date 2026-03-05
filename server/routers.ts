@@ -22,7 +22,10 @@ import {
   updateBucketItem,
   upsertUserSettings,
   getTopGoals,
-  getTopUsers,
+  getTopUsersByYear,
+  getUserYearlySummary,
+  getPublicShareProfile,
+  getLeaderboardAvailableYears,
 } from "./db";
 import { attachSessionCookie, createSessionToken } from "./_core/auth";
 
@@ -170,6 +173,16 @@ export const appRouter = router({
     stats: protectedProcedure.query(async ({ ctx }) => {
       return getBucketStats(ctx.user.id);
     }),
+
+    yearlySummary: protectedProcedure
+      .input(
+        z.object({
+          year: z.number().int().min(1900).max(3000).nullable().optional(),
+        }).optional()
+      )
+      .query(async ({ ctx, input }) => {
+        return getUserYearlySummary(ctx.user.id, input?.year ?? null);
+      }),
   }),
 
   // ─── Leaderboard ─────────────────────────────────────────────────
@@ -182,8 +195,18 @@ export const appRouter = router({
       return getTopGoals(100);
     }),
 
-    topUsers: publicProcedure.query(async () => {
-      return getTopUsers(100);
+    topUsers: publicProcedure
+      .input(
+        z.object({
+          year: z.number().int().min(1900).max(3000).optional(),
+        }).optional()
+      )
+      .query(async ({ input }) => {
+        return getTopUsersByYear(100, input?.year);
+      }),
+
+    availableYears: publicProcedure.query(async () => {
+      return getLeaderboardAvailableYears();
     }),
   }),
 
@@ -196,6 +219,7 @@ export const appRouter = router({
           pageSize: z.number().int().min(1).max(50).default(10),
           category: z.string().max(64).optional(),
           excludeMine: z.boolean().default(false),
+          sort: z.enum(["popular", "newest"]).optional(),
         }).optional()
       )
       .query(async ({ ctx, input }) => {
@@ -204,6 +228,7 @@ export const appRouter = router({
         const pageSize = input?.pageSize ?? 10;
         const category = input?.category;
         const excludeUserId = input?.excludeMine && ctx.user ? ctx.user.id : undefined;
+        const sort = input?.sort ?? "popular";
 
         const result = await getCommunityGoalsPage({
           page,
@@ -211,6 +236,7 @@ export const appRouter = router({
           category,
           excludeUserId,
           publicOnly: true,
+          sort,
         });
 
         return {
@@ -246,6 +272,18 @@ export const appRouter = router({
               ? undefined
               : normalizeAvatarEmoji(input.avatarEmoji),
         });
+      }),
+  }),
+
+  share: router({
+    profile: publicProcedure
+      .input(
+        z.object({
+          userId: z.number().int().positive(),
+        })
+      )
+      .query(async ({ input }) => {
+        return getPublicShareProfile(input.userId);
       }),
   }),
 });

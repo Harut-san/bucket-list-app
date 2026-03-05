@@ -15,6 +15,7 @@ import AppShell from "./components/AppShell";
 import PublicLeaderboard from "./pages/PublicLeaderboard";
 import PublicNewGoals from "./pages/PublicNewGoals";
 import About from "./pages/About";
+import ShareProfile from "./pages/ShareProfile";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 
@@ -63,6 +64,14 @@ function Router() {
         <PublicShell>
           <PublicLeaderboard />
         </PublicShell>
+      </Route>
+
+      <Route path="/share/:userId">
+        {(params: { userId: string }) => (
+          <PublicShell>
+            <ShareProfile userId={Number(params.userId)} />
+          </PublicShell>
+        )}
       </Route>
 
       <Route path="/new-goals">

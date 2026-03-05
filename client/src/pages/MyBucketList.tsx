@@ -1,6 +1,8 @@
 import { trpc } from "@/lib/trpc";
 import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { normalizeAvatarEmoji } from "@shared/const";
 import {
   DndContext,
   closestCenter,
@@ -29,6 +31,9 @@ import {
   X,
   Check,
   Loader2,
+  Share2,
+  Link2,
+  ImageDown,
 } from "lucide-react";
 import { toast } from "sonner";
 // BucketItem type inline
@@ -67,6 +72,107 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 const TITLE_MIN_LENGTH = 3;
 const TITLE_MAX_LENGTH = 120;
+
+const CONFETTI_COLORS = [
+  "oklch(0.78 0.14 75)",
+  "oklch(0.72 0.14 20)",
+  "oklch(0.62 0.12 290)",
+  "oklch(0.65 0.12 145)",
+  "oklch(0.65 0.1 185)",
+];
+
+function burstConfettiFromBottom() {
+  if (typeof document === "undefined") return;
+
+  const container = document.createElement("div");
+  container.className = "confetti-container";
+  document.body.appendChild(container);
+
+  const count = 44;
+  for (let index = 0; index < count; index += 1) {
+    const piece = document.createElement("span");
+    piece.className = "confetti-piece";
+    piece.style.left = `${Math.random() * 100}%`;
+    piece.style.bottom = `${-12 - Math.random() * 20}px`;
+    piece.style.background = CONFETTI_COLORS[index % CONFETTI_COLORS.length];
+    piece.style.setProperty("--dx", `${(Math.random() - 0.5) * 320}px`);
+    piece.style.setProperty("--dy", `${-190 - Math.random() * 260}px`);
+    piece.style.setProperty("--rot", `${Math.random() * 540}deg`);
+    piece.style.animationDelay = `${Math.random() * 0.2}s`;
+    piece.style.animationDuration = `${0.8 + Math.random() * 0.9}s`;
+    container.appendChild(piece);
+  }
+
+  window.setTimeout(() => {
+    container.remove();
+  }, 1700);
+}
+
+async function renderGoalsSnapshot(options: {
+  displayName: string;
+  avatarEmoji: string;
+  yearLabel: string;
+  addedCount: number;
+  achievedCount: number;
+  items: BucketItem[];
+}) {
+  const width = 1080;
+  const rowHeight = 56;
+  const maxRows = Math.min(14, options.items.length);
+  const height = 320 + maxRows * rowHeight;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+
+  ctx.fillStyle = "#f8f3e8";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = "#211911";
+  ctx.font = "700 56px 'Space Mono'";
+  ctx.fillText("[BUCKET_LIST]", 56, 88);
+
+  ctx.font = "600 28px 'Space Mono'";
+  ctx.fillText(`${options.avatarEmoji} ${options.displayName}`, 56, 140);
+
+  ctx.font = "500 24px 'Courier Prime'";
+  ctx.fillStyle = "#4e4b45";
+  ctx.fillText(`${options.yearLabel} · Added ${options.addedCount} · Achieved ${options.achievedCount}`, 56, 180);
+
+  ctx.strokeStyle = "#211911";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(56, 204);
+  ctx.lineTo(width - 56, 204);
+  ctx.stroke();
+
+  ctx.font = "600 24px 'Space Mono'";
+  options.items.slice(0, maxRows).forEach((item, index) => {
+    const y = 248 + index * rowHeight;
+    ctx.fillStyle = item.achieved ? "#716e68" : "#211911";
+    const marker = item.achieved ? "✓" : "◻";
+    const text = `${marker} ${item.title}`;
+    ctx.fillText(text.slice(0, 74), 64, y);
+
+    if (item.category) {
+      ctx.font = "500 18px 'Courier Prime'";
+      ctx.fillStyle = "#5a5650";
+      ctx.fillText(item.category, width - 240, y);
+      ctx.font = "600 24px 'Space Mono'";
+    }
+  });
+
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("Failed to render snapshot"));
+        return;
+      }
+      resolve(blob);
+    }, "image/png");
+  });
+}
 
 // ─── Goal Form Modal ──────────────────────────────────────────────
 interface GoalFormProps {
@@ -330,9 +436,11 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
     <div
       ref={setNodeRef}
       style={style}
-      onClick={() => onOpen(item)}
-      role="button"
-      tabIndex={0}
+      onClick={() => {
+        if (!isSortableDragging) onOpen(item);
+      }}
+      {...attributes}
+      {...listeners}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -349,15 +457,12 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
       )}
 
       {/* Drag handle */}
-      <button
-        className="drag-handle flex-shrink-0 mt-0.5 touch-none"
-        onClick={(e) => e.stopPropagation()}
-        {...attributes}
-        {...listeners}
+      <div
+        className="drag-handle drag-zone flex-shrink-0 mt-0.5 touch-none"
         aria-label="Drag to reorder"
       >
         <GripVertical size={16} />
-      </button>
+      </div>
 
       {/* Achieved toggle */}
       <button
@@ -365,6 +470,7 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
           e.stopPropagation();
           onToggle(item.id);
         }}
+        onPointerDown={(e) => e.stopPropagation()}
         className="goal-checkbox-button flex-shrink-0 mt-0.5"
         aria-label={item.achieved ? "Mark as unachieved" : "Mark as achieved"}
         aria-pressed={item.achieved}
@@ -411,6 +517,7 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
             e.stopPropagation();
             onEdit(item);
           }}
+          onPointerDown={(e) => e.stopPropagation()}
           className="p-1.5 rounded hover:bg-muted transition-colors"
           aria-label="Edit goal"
         >
@@ -425,6 +532,7 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
             }
             setConfirmDelete(true);
           }}
+          onPointerDown={(e) => e.stopPropagation()}
           className={`p-1.5 rounded transition-colors ${confirmDelete ? "bg-destructive text-background" : "hover:bg-destructive/10 text-destructive"}`}
           aria-label="Delete goal"
           title={confirmDelete ? "Click again to confirm delete" : "Delete goal"}
@@ -439,17 +547,24 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
 // ─── Main Page ────────────────────────────────────────────────────
 export default function MyBucketList() {
   const utils = trpc.useUtils();
+  const { user } = useAuth();
   const { data: items = [], isLoading } = trpc.bucketList.list.useQuery();
+  const { data: settings } = trpc.settings.get.useQuery();
 
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<BucketItem | null>(null);
   const [viewItem, setViewItem] = useState<BucketItem | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [dragOverlayWidth, setDragOverlayWidth] = useState<number | null>(null);
   const displayItems = selectedCategory
     ? items.filter((item) => item.category === selectedCategory)
     : items;
+  const yearlySummaryQuery = trpc.bucketList.yearlySummary.useQuery({
+    year: selectedYear ?? undefined,
+  });
 
   const addMutation = trpc.bucketList.add.useMutation({
     onSuccess: () => {
@@ -572,6 +687,76 @@ export default function MyBucketList() {
     return acc;
   }, {});
   const sortedCategories = Object.keys(categoryCounts).sort((a, b) => a.localeCompare(b));
+  const avatarEmoji = normalizeAvatarEmoji(settings?.avatarEmoji);
+  const displayName = settings?.displayName ?? user?.name ?? "Explorer";
+  const selectedYearStats = yearlySummaryQuery.data?.selectedYearStats ?? {
+    addedCount: 0,
+    achievedCount: 0,
+    completionRate: 0,
+  };
+  const availableYears = yearlySummaryQuery.data?.availableYears ?? [];
+
+  const handleToggleGoal = useCallback((id: number) => {
+    const current = items.find((item) => item.id === id);
+    if (current && !current.achieved) {
+      burstConfettiFromBottom();
+    }
+    toggleMutation.mutate({ id });
+  }, [items, toggleMutation]);
+
+  useEffect(() => {
+    const onClickOutside = () => setShareOpen(false);
+    if (!shareOpen) return;
+    document.addEventListener("click", onClickOutside);
+    return () => document.removeEventListener("click", onClickOutside);
+  }, [shareOpen]);
+
+  const handleCopyShareLink = async () => {
+    if (!user?.id) {
+      toast.error("Unable to generate share link");
+      return;
+    }
+
+    const url = `${window.location.origin}/share/${user.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Share link copied");
+    } catch {
+      toast.error("Failed to copy link");
+    } finally {
+      setShareOpen(false);
+    }
+  };
+
+  const handleCopySnapshot = async () => {
+    try {
+      const yearLabel = selectedYear ? `Year ${selectedYear}` : "All years";
+      const snapshotBlob = await renderGoalsSnapshot({
+        displayName,
+        avatarEmoji,
+        yearLabel,
+        addedCount: selectedYearStats.addedCount,
+        achievedCount: selectedYearStats.achievedCount,
+        items,
+      });
+
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": snapshotBlob })]);
+        toast.success("Snapshot copied to clipboard");
+      } else {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(snapshotBlob);
+        link.download = "bucket-list-snapshot.png";
+        link.click();
+        URL.revokeObjectURL(link.href);
+        toast.success("Snapshot downloaded");
+      }
+    } catch {
+      toast.error("Failed to create snapshot");
+    } finally {
+      setShareOpen(false);
+    }
+  };
 
   return (
     <div className="py-4">
@@ -587,13 +772,79 @@ export default function MyBucketList() {
               : `${achieved} of ${total} goals achieved`}
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="sketch-button px-4 py-2 bg-foreground text-background flex items-center gap-2"
-        >
-          <Plus size={16} />
-          Add goal
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="relative" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setShareOpen((open) => !open)}
+              className="sketch-button px-3 py-2 bg-background flex items-center gap-2"
+            >
+              <Share2 size={15} />
+              Share
+            </button>
+            {shareOpen && (
+              <div className="absolute right-0 mt-2 sketch-border bg-background p-1.5 z-40 min-w-44">
+                <button
+                  type="button"
+                  onClick={handleCopyShareLink}
+                  className="w-full text-left px-2.5 py-2 rounded hover:bg-muted text-sm flex items-center gap-2"
+                  style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+                >
+                  <Link2 size={14} />
+                  Copy link
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopySnapshot}
+                  className="w-full text-left px-2.5 py-2 rounded hover:bg-muted text-sm flex items-center gap-2"
+                  style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+                >
+                  <ImageDown size={14} />
+                  Copy snapshot
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setShowForm(true)}
+            className="sketch-button px-4 py-2 bg-foreground text-background flex items-center gap-2"
+          >
+            <Plus size={16} />
+            Add goal
+          </button>
+        </div>
+      </div>
+
+      <div className="sketch-border p-4 bg-background/60 mb-4">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+            Yearly summary:
+          </span>
+          <button
+            type="button"
+            className={`category-badge transition-colors ${selectedYear === null ? "bg-foreground text-background border-foreground" : ""}`}
+            onClick={() => setSelectedYear(null)}
+            style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+          >
+            All years
+          </button>
+          {availableYears.map((year) => (
+            <button
+              key={year}
+              type="button"
+              className={`category-badge transition-colors ${selectedYear === year ? "bg-foreground text-background border-foreground" : ""}`}
+              onClick={() => setSelectedYear(year)}
+              style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+            >
+              {year}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-4 text-sm" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          <span>Added: <b>{selectedYearStats.addedCount}</b></span>
+          <span>Achieved: <b>{selectedYearStats.achievedCount}</b></span>
+          <span>Completion: <b>{selectedYearStats.completionRate}%</b></span>
+        </div>
       </div>
 
       {/* Progress bar */}
@@ -686,7 +937,7 @@ export default function MyBucketList() {
               <GoalItem
                 key={item.id}
                 item={item}
-                onToggle={(id) => toggleMutation.mutate({ id })}
+                onToggle={handleToggleGoal}
                 onEdit={(item) => {
                   setViewItem(null);
                   setEditItem(item);
@@ -711,7 +962,7 @@ export default function MyBucketList() {
                 <GoalItem
                   key={item.id}
                   item={item}
-                  onToggle={(id) => toggleMutation.mutate({ id })}
+                  onToggle={handleToggleGoal}
                   onEdit={(item) => {
                     setViewItem(null);
                     setEditItem(item);

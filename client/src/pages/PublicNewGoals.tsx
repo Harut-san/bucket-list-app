@@ -30,6 +30,7 @@ const ALL_CATEGORIES = [
 
 export default function PublicNewGoals() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [sort, setSort] = useState<"popular" | "newest">("popular");
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const { data: goalsData, isLoading } = trpc.globalGoals.list.useQuery({
@@ -37,6 +38,7 @@ export default function PublicNewGoals() {
     pageSize,
     category: selectedCategory ?? undefined,
     excludeMine: false,
+    sort,
   });
   const goals = goalsData?.items ?? [];
   const totalPages = goalsData?.totalPages ?? 1;
@@ -98,6 +100,34 @@ export default function PublicNewGoals() {
             </button>
           );
         })}
+      </div>
+
+      <div className="flex items-center gap-2 mb-5">
+        <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          Sort:
+        </span>
+        <button
+          type="button"
+          className={`category-badge transition-colors ${sort === "popular" ? "bg-foreground text-background border-foreground" : ""}`}
+          onClick={() => {
+            setSort("popular");
+            setPage(1);
+          }}
+          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+        >
+          Popular
+        </button>
+        <button
+          type="button"
+          className={`category-badge transition-colors ${sort === "newest" ? "bg-foreground text-background border-foreground" : ""}`}
+          onClick={() => {
+            setSort("newest");
+            setPage(1);
+          }}
+          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+        >
+          Newest
+        </button>
       </div>
 
       {isLoading ? (

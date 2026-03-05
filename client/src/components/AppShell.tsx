@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { normalizeAvatarEmoji } from "@shared/const";
 
 const appNavItems = [
   { label: "My List", href: "/app" },
@@ -113,16 +114,14 @@ export default function AppShell({ children }: AppShellProps) {
   const statsQuery = trpc.bucketList.stats.useQuery(undefined, {
     enabled: !!user,
   });
+  const settingsQuery = trpc.settings.get.useQuery(undefined, {
+    enabled: !!user,
+  });
 
   const stats = statsQuery.data;
 
   const displayName = user?.name?.split(" ")[0] ?? "Explorer";
-  const initials = (user?.name ?? "?")
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const avatarEmoji = normalizeAvatarEmoji(settingsQuery.data?.avatarEmoji);
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -217,7 +216,7 @@ export default function AppShell({ children }: AppShellProps) {
                       fontWeight: 700,
                     }}
                   >
-                    {initials}
+                    {avatarEmoji}
                   </div>
                   <ChevronDown size={14} className="opacity-60" />
                 </button>

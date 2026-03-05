@@ -245,6 +245,7 @@ export async function getCommunityGoalsPage(options: {
   category?: string;
   excludeUserId?: number;
   publicOnly?: boolean;
+  sort?: "popular" | "newest";
 }) {
   const db = await getDb();
   if (!db) {
@@ -268,6 +269,10 @@ export async function getCommunityGoalsPage(options: {
   }
 
   const whereSql = sql`WHERE ${sql.join(conditions, sql` AND `)}`;
+  const orderSql =
+    options.sort === "newest"
+      ? sql`ORDER BY latestAt DESC, addedCount DESC`
+      : sql`ORDER BY addedCount DESC, latestAt DESC`;
 
   const itemsResult = await db.execute(sql`
     SELECT
@@ -279,7 +284,7 @@ export async function getCommunityGoalsPage(options: {
     LEFT JOIN user_settings us ON us.userId = b.userId
     ${whereSql}
     GROUP BY b.title, b.category
-    ORDER BY addedCount DESC, latestAt DESC
+    ${orderSql}
     LIMIT ${pageSize} OFFSET ${offset}
   `);
 
@@ -408,6 +413,8 @@ export async function getTopUsers(limit = 100) {
     sql`SELECT u.id, u.name, u.email,
         COUNT(CASE WHEN b.achieved = 1 THEN 1 END) as achievedCount,
         COUNT(b.id) as totalCount,
+        COUNT(b.id) as addedCountInYear,
+        COUNT(CASE WHEN b.achieved = 1 THEN 1 END) as achievedCountInYear,
         us.displayName, us.avatarEmoji, us.isPublic
       FROM users u
       LEFT JOIN bucket_items b ON b.userId = u.id
@@ -425,8 +432,196 @@ export async function getTopUsers(limit = 100) {
     email: string;
     achievedCount: number;
     totalCount: number;
+    addedCountInYear: number;
+    achievedCountInYear: number;
     displayName: string | null;
     avatarEmoji: string | null;
     isPublic: boolean;
   }>;
+}
+
+export async function getTopUsersByYear(limit = 100, year?: number) {
+  if (!year) return getTopUsers(limit);
+
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db.execute(
+    sql`SELECT u.id, u.name, u.email,
+        COUNT(CASE WHEN b.achieved = 1 THEN 1 END) as achievedCount,
+        COUNT(b.id) as totalCount,
+        COUNT(CASE WHEN YEAR(b.createdAt) = ${year} THEN 1 END) as addedCountInYear,
+        COUNT(CASE WHEN b.achieved = 1 AND YEAR(b.achievedAt) = ${year} THEN 1 END) as achievedCountInYear,
+        us.displayName, us.avatarEmoji, us.isPublic
+      FROM users u
+      LEFT JOIN bucket_items b ON b.userId = u.id
+      LEFT JOIN user_settings us ON us.userId = u.id
+      WHERE (us.isPublic IS NULL OR us.isPublic = 1)
+      GROUP BY u.id, u.name, u.email, us.displayName, us.avatarEmoji, us.isPublic
+      HAVING (addedCountInYear > 0 OR achievedCountInYear > 0)
+      ORDER BY achievedCountInYear DESC, addedCountInYear DESC, achievedCount DESC, totalCount ASC
+      LIMIT ${limit}`
+  );
+
+  return (result as any)[0] as Array<{
+    id: number;
+    name: string | null;
+    email: string;
+    achievedCount: number;
+    totalCount: number;
+    addedCountInYear: number;
+    achievedCountInYear: number;
+    displayName: string | null;
+    avatarEmoji: string | null;
+    isPublic: boolean;
+  }>;
+}
+
+export async function getLeaderboardAvailableYears() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db.execute(
+    sql`SELECT DISTINCT yr.year
+      FROM (
+        SELECT YEAR(b.createdAt) AS year
+        FROM bucket_items b
+        LEFT JOIN user_settings us ON us.userId = b.userId
+        WHERE (us.isPublic IS NULL OR us.isPublic = 1)
+        UNION
+        SELECT YEAR(b.achievedAt) AS year
+        FROM bucket_items b
+        LEFT JOIN user_settings us ON us.userId = b.userId
+        WHERE b.achieved = 1
+          AND b.achievedAt IS NOT NULL
+          AND (us.isPublic IS NULL OR us.isPublic = 1)
+      ) yr
+      WHERE yr.year IS NOT NULL
+      ORDER BY yr.year DESC`
+  );
+
+  const rows = ((result as any)[0] ?? []) as Array<{ year: number | string | null }>;
+  return rows
+    .map((row) => Number(row.year))
+    .filter((year) => Number.isFinite(year) && year > 1900 && year < 3000);
+}
+
+export async function getUserYearlySummary(userId: number, year?: number | null) {
+  const db = await getDb();
+  if (!db) {
+    return {
+      availableYears: [] as number[],
+      totalsByYear: [] as Array<{ year: number; addedCount: number; achievedCount: number }>,
+      selectedYearStats: { addedCount: 0, achievedCount: 0, completionRate: 0 },
+      selectedYear: null as number | null,
+    };
+  }
+
+  const rows = await db
+    .select({
+      createdAt: bucketItems.createdAt,
+      achievedAt: bucketItems.achievedAt,
+      achieved: bucketItems.achieved,
+    })
+    .from(bucketItems)
+    .where(eq(bucketItems.userId, userId));
+
+  const byYear = new Map<number, { addedCount: number; achievedCount: number }>();
+  const yearsSet = new Set<number>();
+
+  for (const row of rows) {
+    const createdYear = new Date(row.createdAt).getFullYear();
+    yearsSet.add(createdYear);
+    const createdEntry = byYear.get(createdYear) ?? { addedCount: 0, achievedCount: 0 };
+    createdEntry.addedCount += 1;
+    byYear.set(createdYear, createdEntry);
+
+    if (row.achieved && row.achievedAt) {
+      const achievedYear = new Date(row.achievedAt).getFullYear();
+      yearsSet.add(achievedYear);
+      const achievedEntry = byYear.get(achievedYear) ?? { addedCount: 0, achievedCount: 0 };
+      achievedEntry.achievedCount += 1;
+      byYear.set(achievedYear, achievedEntry);
+    }
+  }
+
+  const availableYears = Array.from(yearsSet).sort((a, b) => b - a);
+  const totalsByYear = availableYears.map((yr) => ({
+    year: yr,
+    addedCount: byYear.get(yr)?.addedCount ?? 0,
+    achievedCount: byYear.get(yr)?.achievedCount ?? 0,
+  }));
+
+  const selectedYear = year ?? null;
+  const selectedTotals = selectedYear != null
+    ? totalsByYear.find((entry) => entry.year === selectedYear)
+    : null;
+  const addedCount = selectedYear == null
+    ? rows.length
+    : selectedTotals?.addedCount ?? 0;
+  const achievedCount = selectedYear == null
+    ? rows.filter((row) => row.achieved).length
+    : selectedTotals?.achievedCount ?? 0;
+  const completionRate = addedCount > 0 ? Math.round((achievedCount / addedCount) * 100) : 0;
+
+  return {
+    availableYears,
+    totalsByYear,
+    selectedYearStats: {
+      addedCount,
+      achievedCount,
+      completionRate,
+    },
+    selectedYear,
+  };
+}
+
+export async function getPublicShareProfile(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const userResult = await db.execute(
+    sql`SELECT u.id, u.name, us.displayName, us.avatarEmoji, us.isPublic
+      FROM users u
+      LEFT JOIN user_settings us ON us.userId = u.id
+      WHERE u.id = ${userId}
+      LIMIT 1`
+  );
+
+  const profile = (userResult as any)[0]?.[0] as
+    | {
+        id: number;
+        name: string | null;
+        displayName: string | null;
+        avatarEmoji: string | null;
+        isPublic: boolean | null;
+      }
+    | undefined;
+
+  if (!profile) return null;
+  if (profile.isPublic === false) return null;
+
+  const goals = await db
+    .select({
+      id: bucketItems.id,
+      title: bucketItems.title,
+      category: bucketItems.category,
+      achieved: bucketItems.achieved,
+      achievedAt: bucketItems.achievedAt,
+      createdAt: bucketItems.createdAt,
+    })
+    .from(bucketItems)
+    .where(eq(bucketItems.userId, userId))
+    .orderBy(asc(bucketItems.sortOrder), asc(bucketItems.createdAt));
+
+  const achievedCount = goals.filter((goal) => goal.achieved).length;
+
+  return {
+    userId: profile.id,
+    displayName: profile.displayName ?? profile.name ?? "Explorer",
+    avatarEmoji: profile.avatarEmoji,
+    totalCount: goals.length,
+    achievedCount,
+    goals,
+  };
 }

@@ -1,6 +1,6 @@
 import { trpc } from "@/lib/trpc";
 import { Plus, Users, Loader2, X, ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -32,6 +32,7 @@ const ALL_CATEGORIES = [
 export default function AppNewGoals() {
   const utils = trpc.useUtils();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [sort, setSort] = useState<"popular" | "newest">("popular");
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const { data: goalsData, isLoading } = trpc.globalGoals.list.useQuery({
@@ -39,6 +40,7 @@ export default function AppNewGoals() {
     pageSize,
     category: selectedCategory ?? undefined,
     excludeMine: false,
+    sort,
   });
   const { data: myItems } = trpc.bucketList.list.useQuery();
 
@@ -62,6 +64,17 @@ export default function AppNewGoals() {
 
   const myGoals = new Map(myItems?.map((i) => [i.title.toLowerCase(), i]) ?? []);
   const goals = goalsData?.items ?? [];
+  const sortedGoals = useMemo(() => {
+    return goals
+      .map((goal, index) => ({ goal, index }))
+      .sort((a, b) => {
+        const aInMine = myGoals.has(a.goal.title.toLowerCase()) ? 1 : 0;
+        const bInMine = myGoals.has(b.goal.title.toLowerCase()) ? 1 : 0;
+        if (aInMine !== bInMine) return aInMine - bInMine;
+        return a.index - b.index;
+      })
+      .map((entry) => entry.goal);
+  }, [goals, myGoals]);
   const totalPages = goalsData?.totalPages ?? 1;
 
   const handleToggle = (goal: { id: number; title: string; category: string | null }) => {
@@ -119,6 +132,34 @@ export default function AppNewGoals() {
         })}
       </div>
 
+      <div className="flex items-center gap-2 mb-5">
+        <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          Sort:
+        </span>
+        <button
+          type="button"
+          className={`category-badge transition-colors ${sort === "popular" ? "bg-foreground text-background border-foreground" : ""}`}
+          onClick={() => {
+            setSort("popular");
+            setPage(1);
+          }}
+          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+        >
+          Popular
+        </button>
+        <button
+          type="button"
+          className={`category-badge transition-colors ${sort === "newest" ? "bg-foreground text-background border-foreground" : ""}`}
+          onClick={() => {
+            setSort("newest");
+            setPage(1);
+          }}
+          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+        >
+          Newest
+        </button>
+      </div>
+
       {isLoading ? (
         <div className="flex items-center justify-center py-16 gap-3">
           <Loader2 className="animate-spin" size={20} />
@@ -126,7 +167,7 @@ export default function AppNewGoals() {
         </div>
       ) : (
         <>
-          {goals.length === 0 ? (
+          {sortedGoals.length === 0 ? (
             <div className="sketch-border-dashed p-10 text-center">
               <p className="text-xl font-bold mb-2" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}>
                 No community goals yet
@@ -137,7 +178,7 @@ export default function AppNewGoals() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {goals.map((goal) => {
+              {sortedGoals.map((goal) => {
                 const color = CATEGORY_COLORS[goal.category ?? ""] ?? "oklch(0.55 0.04 70)";
                 const existing = myGoals.get(goal.title.toLowerCase());
                 const isAdded = !!existing;
