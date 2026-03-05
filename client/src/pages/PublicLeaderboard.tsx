@@ -1,7 +1,8 @@
 import { trpc } from "@/lib/trpc";
-import { normalizeAvatarEmoji } from "@shared/const";
 import { Users, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import UserAvatar from "@/components/UserAvatar";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Travel: "oklch(0.65 0.1 185)",
@@ -22,13 +23,27 @@ type LeaderboardTab = "goals" | "users";
 export default function PublicLeaderboard() {
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("goals");
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
-  const { data: goalLeaderboard, isLoading: goalsLoading } = trpc.leaderboard.topGoals.useQuery({
-    year: selectedYear ?? undefined,
+  const [introStep, setIntroStep] = useState<0 | 1 | 2>(0);
+  const { data: goalLeaderboard, isLoading: goalsLoading } = trpc.leaderboard.topGoals.useQuery(
+    { year: selectedYear ?? undefined },
+    {
+      enabled: activeTab === "goals",
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    }
+  );
+  const { data: userLeaderboard, isLoading: usersLoading } = trpc.leaderboard.topUsers.useQuery(
+    { year: selectedYear ?? undefined },
+    {
+      enabled: activeTab === "users",
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    }
+  );
+  const { data: availableYears = [] } = trpc.leaderboard.availableYears.useQuery(undefined, {
+    staleTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
   });
-  const { data: userLeaderboard, isLoading: usersLoading } = trpc.leaderboard.topUsers.useQuery({
-    year: selectedYear ?? undefined,
-  });
-  const { data: availableYears = [] } = trpc.leaderboard.availableYears.useQuery();
 
   const isLoading = activeTab === "goals" ? goalsLoading : usersLoading;
   const data = activeTab === "goals" ? goalLeaderboard : userLeaderboard;
@@ -46,16 +61,58 @@ export default function PublicLeaderboard() {
         </div>
       </div>
 
-      {/* CTA for guests */}
-      <div className="sketch-border-dashed p-4 mb-6 flex items-center justify-between gap-4 flex-wrap">
-        <p className="text-sm" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600, letterSpacing: "0.02em" }}>
-          Want to appear on the leaderboard? Start your bucket list today!
+      <div className="sketch-border-dashed p-4 mb-6">
+        <p className="text-xs uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+          quick start prelude
         </p>
-        <a href="/signup">
-          <button className="sketch-button px-4 py-1.5 bg-foreground text-background text-sm" style={{ fontFamily: "'Space Mono', monospace" }}>
-            Get started →
-          </button>
-        </a>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+          {[
+            { title: "Pick a vibe", body: "Travel / Skills / Adventure", cta: "Choose" },
+            { title: "Claim one mission", body: "Add your first goal in 10s", cta: "Claim" },
+            { title: "Compete live", body: "Climb goals + user leaderboard", cta: "Compete" },
+          ].map((card, index) => (
+            <button
+              key={card.title}
+              type="button"
+              onClick={() => {
+                setIntroStep(index as 0 | 1 | 2);
+                window.location.href = "/signup";
+              }}
+              className={`sketch-button text-left p-3 transition-all ${introStep === index ? "bg-foreground text-background" : "bg-background"}`}
+            >
+              <p className="text-sm" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>{card.title}</p>
+              <p className="text-xs opacity-80 mt-1" style={{ fontFamily: "'Courier Prime', monospace" }}>{card.body}</p>
+              <span className="text-xs mt-2 block" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>[{card.cta}]</span>
+            </button>
+          ))}
+        </div>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={introStep}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.16 }}
+            className="grid w-full gap-3 sm:grid-cols-[1fr_auto] sm:items-center"
+          >
+            <p
+              className="text-sm min-h-[42px] flex items-center"
+              style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600, letterSpacing: "0.02em" }}
+            >
+              {introStep === 0 && "Want to appear on the leaderboard? Start your bucket list today."}
+              {introStep === 1 && "You can add your first goal in under 10 seconds."}
+              {introStep === 2 && "Public goals and users update continuously as people complete missions."}
+            </p>
+            <a href={introStep === 0 ? "/signup" : introStep === 1 ? "/login" : "/signup"}>
+              <button
+                className="sketch-button px-4 py-1.5 bg-foreground text-background text-sm min-w-[150px]"
+                style={{ fontFamily: "'Space Mono', monospace" }}
+              >
+                {introStep === 2 ? "Join the board ->" : "Get started ->"}
+              </button>
+            </a>
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Tab buttons */}
@@ -176,8 +233,6 @@ export default function PublicLeaderboard() {
             const rank = index + 1;
             const rankEmoji = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "";
             const displayName = user.displayName ?? user.name ?? "Anonymous Explorer";
-            const emoji = normalizeAvatarEmoji(user.avatarEmoji);
-
             return (
               <div
                 key={user.id}
@@ -187,12 +242,7 @@ export default function PublicLeaderboard() {
                   {rankEmoji || rank}
                 </div>
 
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0 sketch-border"
-                  style={{ background: "oklch(0.93 0.02 80)" }}
-                >
-                  {emoji}
-                </div>
+                <UserAvatar avatarEmoji={user.avatarEmoji} avatarImageUrl={user.avatarImageUrl} />
 
                 <div className="flex-1 min-w-0">
                   <span

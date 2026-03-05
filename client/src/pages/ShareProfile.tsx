@@ -1,6 +1,6 @@
 import { trpc } from "@/lib/trpc";
-import { normalizeAvatarEmoji } from "@shared/const";
 import { Loader2 } from "lucide-react";
+import UserAvatar from "@/components/UserAvatar";
 
 interface ShareProfileProps {
   userId: number;
@@ -34,7 +34,6 @@ export default function ShareProfile({ userId }: ShareProfileProps) {
     );
   }
 
-  const emoji = normalizeAvatarEmoji(data.avatarEmoji);
   const search = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const categoryFilter = search?.get("category")?.trim() || null;
   const yearFilter = Number(search?.get("year") ?? "");
@@ -50,12 +49,7 @@ export default function ShareProfile({ userId }: ShareProfileProps) {
     <div className="py-4">
       <div className="sketch-border p-5 bg-background/70 mb-5">
         <div className="flex items-center gap-3">
-          <div
-            className="w-12 h-12 rounded-full flex items-center justify-center text-2xl sketch-border"
-            style={{ background: "oklch(0.93 0.02 80)" }}
-          >
-            {emoji}
-          </div>
+          <UserAvatar avatarEmoji={data.avatarEmoji} avatarImageUrl={data.avatarImageUrl} className="w-12 h-12 text-2xl" />
           <div>
             <h2 style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em", fontSize: "1.6rem" }}>
               {data.displayName}

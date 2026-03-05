@@ -1,8 +1,8 @@
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { normalizeAvatarEmoji } from "@shared/const";
 import { Users, Loader2 } from "lucide-react";
 import { useState } from "react";
+import UserAvatar from "@/components/UserAvatar";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Travel: "oklch(0.65 0.1 185)",
@@ -22,15 +22,32 @@ type LeaderboardTab = "goals" | "users";
 export default function AppLeaderboard() {
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("goals");
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
-  const { data: goalLeaderboard, isLoading: goalsLoading } = trpc.leaderboard.topGoals.useQuery({
-    year: selectedYear ?? undefined,
+  const { data: goalLeaderboard, isLoading: goalsLoading } = trpc.leaderboard.topGoals.useQuery(
+    { year: selectedYear ?? undefined },
+    {
+      enabled: activeTab === "goals",
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    }
+  );
+  const { data: userLeaderboard, isLoading: usersLoading } = trpc.leaderboard.topUsers.useQuery(
+    { year: selectedYear ?? undefined },
+    {
+      enabled: activeTab === "users",
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    }
+  );
+  const { data: availableYears = [] } = trpc.leaderboard.availableYears.useQuery(undefined, {
+    staleTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
   });
-  const { data: userLeaderboard, isLoading: usersLoading } = trpc.leaderboard.topUsers.useQuery({
-    year: selectedYear ?? undefined,
-  });
-  const { data: availableYears = [] } = trpc.leaderboard.availableYears.useQuery();
   const { user } = useAuth();
-  const statsQuery = trpc.bucketList.stats.useQuery();
+  const statsQuery = trpc.bucketList.stats.useQuery(undefined, {
+    enabled: activeTab === "users",
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
   const myRank = statsQuery.data?.rank;
 
   const isLoading = activeTab === "goals" ? goalsLoading : usersLoading;
@@ -173,7 +190,6 @@ export default function AppLeaderboard() {
             const rank = index + 1;
             const rankEmoji = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "";
             const displayName = leader.displayName ?? leader.name ?? "Anonymous Explorer";
-            const emoji = normalizeAvatarEmoji(leader.avatarEmoji);
             const isMe = leader.id === user?.id;
 
             return (
@@ -199,12 +215,7 @@ export default function AppLeaderboard() {
                   {rankEmoji || rank}
                 </div>
 
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0 sketch-border"
-                  style={{ background: "oklch(0.93 0.02 80)" }}
-                >
-                  {emoji}
-                </div>
+                <UserAvatar avatarEmoji={leader.avatarEmoji} avatarImageUrl={leader.avatarImageUrl} />
 
                 <div className="flex-1 min-w-0">
                   <span

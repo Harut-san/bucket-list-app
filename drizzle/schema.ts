@@ -59,6 +59,7 @@ export const userSettings = mysqlTable("user_settings", {
   displayName: varchar("displayName", { length: 128 }),
   bio: text("bio"),
   avatarEmoji: varchar("avatarEmoji", { length: 8 }),
+  avatarImageUrl: varchar("avatarImageUrl", { length: 1024 }),
   isPublic: boolean("isPublic").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

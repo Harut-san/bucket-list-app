@@ -9,10 +9,13 @@ import {
   Star,
   ChevronDown,
   Github,
+  Trophy,
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { normalizeAvatarEmoji } from "@shared/const";
+import UserAvatar from "@/components/UserAvatar";
+import { PUBLIC_APP_URL } from "@/const";
 
 const appNavItems = [
   { label: "My List", href: "/app" },
@@ -26,9 +29,10 @@ interface ProgressBadgeProps {
   achieved: number;
   rank?: number | null;
   compact?: boolean;
+  onRankClick?: (() => void) | null;
 }
 
-function ProgressBadge({ total, achieved, rank, compact = false }: ProgressBadgeProps) {
+function ProgressBadge({ total, achieved, rank, compact = false, onRankClick = null }: ProgressBadgeProps) {
   const pct = total > 0 ? Math.round((achieved / total) * 100) : 0;
 
   if (compact) {
@@ -42,12 +46,17 @@ function ProgressBadge({ total, achieved, rank, compact = false }: ProgressBadge
             </span>
           </div>
           {rank != null && (
-            <div className="flex flex-col text-right">
+            <button
+              type="button"
+              onClick={onRankClick ?? undefined}
+              className="flex flex-col text-right min-w-[68px]"
+              aria-label="Show rank insights"
+            >
               <span className="text-xs opacity-60" style={{ fontFamily: "'Courier Prime', monospace" }}>rank</span>
               <span className="text-2xl font-bold leading-none" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>
                 #{rank}
               </span>
-            </div>
+            </button>
           )}
         </div>
         <div className="sketch-progress mt-2">
@@ -80,12 +89,17 @@ function ProgressBadge({ total, achieved, rank, compact = false }: ProgressBadge
       {rank != null && (
         <>
           <div className="w-px h-8 bg-border opacity-50" />
-          <div className="flex flex-col items-center">
+          <button
+            type="button"
+            onClick={onRankClick ?? undefined}
+            className="flex flex-col items-center min-w-[70px]"
+            aria-label="Show rank insights"
+          >
             <span className="text-xs opacity-60" style={{ fontFamily: "'Courier Prime', monospace" }}>rank</span>
             <span className="text-lg font-bold leading-none" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>
               #{rank}
             </span>
-          </div>
+          </button>
         </>
       )}
     </div>
@@ -101,27 +115,48 @@ export default function AppShell({ children }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [rankInsightsOpen, setRankInsightsOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const creditsRef = useRef<HTMLDivElement | null>(null);
   const { user, logout } = useAuth();
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => {
       logout();
-      window.location.href = "/";
+      window.location.href = PUBLIC_APP_URL;
     },
   });
 
   const statsQuery = trpc.bucketList.stats.useQuery(undefined, {
     enabled: !!user,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
   const settingsQuery = trpc.settings.get.useQuery(undefined, {
     enabled: !!user,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const stats = statsQuery.data;
+  const usersCountQuery = trpc.leaderboard.usersCount.useQuery(undefined, {
+    enabled: !!user && !!stats?.rank,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
 
   const displayName = user?.name?.split(" ")[0] ?? "Explorer";
   const avatarEmoji = normalizeAvatarEmoji(settingsQuery.data?.avatarEmoji);
+  const usersCount = usersCountQuery.data?.count ?? null;
+  const percentile =
+    stats?.rank && usersCount ? Math.max(1, Math.round((stats.rank / usersCount) * 100)) : null;
+
+  const cohortLabel = (() => {
+    if (percentile == null) return "Goal Getter";
+    if (percentile <= 5) return "Top Achiever";
+    if (percentile <= 20) return "Goal Getter";
+    if (percentile <= 50) return "Steady Climber";
+    return "New Starter";
+  })();
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -167,8 +202,10 @@ export default function AppShell({ children }: AppShellProps) {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start py-6 px-4">
-      <div
+    <div className="min-h-screen flex flex-col items-center justify-start p-5 md:p-[70px]">
+      <motion.div
+        layout
+        transition={{ layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] } }}
         className="w-full max-w-3xl sketch-card thin-typography relative flex flex-col overflow-hidden"
         style={{ minHeight: "80vh" }}
       >
@@ -194,6 +231,7 @@ export default function AppShell({ children }: AppShellProps) {
                   total={stats.total}
                   achieved={stats.achieved}
                   rank={stats.rank}
+                  onRankClick={() => setRankInsightsOpen(true)}
                 />
               )}
 
@@ -207,69 +245,71 @@ export default function AppShell({ children }: AppShellProps) {
                   aria-expanded={accountMenuOpen}
                   aria-label="Account menu"
                 >
-                  <div
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold"
-                    style={{
-                      background: "oklch(0.78 0.14 75)",
-                      color: "oklch(0.18 0.02 60)",
-                      fontFamily: "'Space Mono', monospace",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {avatarEmoji}
-                  </div>
+                  <UserAvatar avatarEmoji={avatarEmoji} avatarImageUrl={settingsQuery.data?.avatarImageUrl} size="sm" />
                   <ChevronDown size={14} className="opacity-60" />
                 </button>
 
                 <AnimatePresence>
                   {accountMenuOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                      transition={{ duration: 0.16 }}
-                      className="sketch-border absolute right-0 top-[calc(100%+0.5rem)] w-52 p-2 z-[120] bg-[oklch(0.97_0.018_82)]"
-                    >
-                      <div className="px-3 py-2">
-                        <p
-                          className="text-base leading-none truncate"
-                          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
-                        >
-                          {displayName}
-                        </p>
-                        <p
-                          className="text-xs mt-1 opacity-60 truncate"
-                          style={{ fontFamily: "'Courier Prime', monospace" }}
-                        >
-                          {user?.email}
-                        </p>
-                      </div>
-                      <div className="pencil-line my-1" />
-                      <Link href="/app/settings">
+                    <>
+                      <motion.button
+                        type="button"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.12 }}
+                        className="hidden md:block fixed inset-0 z-[110] bg-[oklch(0.18_0.02_60_/_0.22)]"
+                        onClick={() => setAccountMenuOpen(false)}
+                        aria-label="Close account menu overlay"
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                        transition={{ duration: 0.16 }}
+                        className="sketch-border absolute right-0 top-[calc(100%+0.5rem)] w-52 p-2 z-[120] bg-[oklch(0.97_0.018_82)]"
+                      >
+                        <div className="px-3 py-2">
+                          <p
+                            className="text-base leading-none truncate"
+                            style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
+                          >
+                            {displayName}
+                          </p>
+                          <p
+                            className="text-xs mt-1 opacity-60 truncate"
+                            style={{ fontFamily: "'Courier Prime', monospace" }}
+                          >
+                            {user?.email}
+                          </p>
+                        </div>
+                        <div className="pencil-line my-1" />
+                        <Link href="/app/settings">
+                          <button
+                            type="button"
+                            onClick={() => setAccountMenuOpen(false)}
+                            className="w-full sketch-button text-left px-3 py-2 transition-colors flex items-center gap-2 bg-background hover:bg-muted"
+                            style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.25rem", fontWeight: 700 }}
+                          >
+                            <Settings size={16} />
+                            Settings
+                          </button>
+                        </Link>
+                        <div className="pencil-line my-1" />
                         <button
                           type="button"
-                          onClick={() => setAccountMenuOpen(false)}
-                          className="w-full sketch-button text-left px-3 py-2 transition-colors flex items-center gap-2 bg-background hover:bg-muted"
+                          onClick={() => {
+                            setAccountMenuOpen(false);
+                            logoutMutation.mutate();
+                          }}
+                          className="w-full sketch-button text-left px-3 py-2 text-destructive transition-colors flex items-center gap-2 bg-background hover:bg-destructive/10"
                           style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.25rem", fontWeight: 700 }}
                         >
-                          <Settings size={16} />
-                          Settings
+                          <LogOut size={16} />
+                          Log out
                         </button>
-                      </Link>
-                      <div className="pencil-line my-1" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAccountMenuOpen(false);
-                          logoutMutation.mutate();
-                        }}
-                        className="w-full sketch-button text-left px-3 py-2 text-destructive transition-colors flex items-center gap-2 bg-background hover:bg-destructive/10"
-                        style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.25rem", fontWeight: 700 }}
-                      >
-                        <LogOut size={16} />
-                        Log out
-                      </button>
-                    </motion.div>
+                      </motion.div>
+                    </>
                   )}
                 </AnimatePresence>
               </div>
@@ -307,12 +347,11 @@ export default function AppShell({ children }: AppShellProps) {
             {mobileOpen && (
               <>
                 <motion.button
-                  type="button"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.14 }}
-                  className="md:hidden fixed inset-0 z-[110] bg-[oklch(0.18_0.02_60_/_0.38)]"
+                  className="md:hidden fixed inset-0 z-[200] bg-[oklch(0.18_0.02_60_/_0.38)]"
                   onClick={() => setMobileOpen(false)}
                   aria-label="Close menu overlay"
                 />
@@ -321,17 +360,17 @@ export default function AppShell({ children }: AppShellProps) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.98 }}
                   transition={{ duration: 0.16 }}
-                  className="md:hidden absolute right-2 top-[calc(100%+0.25rem)] z-[120] w-[17rem] max-w-[92vw] overflow-visible"
+                  className="md:hidden fixed right-4 top-6 z-[210] w-[17rem] max-w-[92vw] overflow-visible"
                 >
                   <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)]">
                     <div className="flex justify-end mb-1">
                       <button
                         type="button"
                         onClick={() => setMobileOpen(false)}
-                        className="sketch-button h-9 w-9 p-0 bg-background"
+                        className="sketch-button h-9 w-9 p-0 bg-background flex items-center justify-center leading-none"
                         aria-label="Close menu"
                       >
-                        <X size={16} />
+                        <X size={17} />
                       </button>
                     </div>
                   <div className="px-3 py-2">
@@ -354,7 +393,7 @@ export default function AppShell({ children }: AppShellProps) {
                       <ProgressBadge total={stats.total} achieved={stats.achieved} rank={stats.rank} compact />
                     </div>
                   )}
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                     {appNavItems.map((item) => (
                     <Link key={item.href} href={item.href}>
                       <button
@@ -371,29 +410,31 @@ export default function AppShell({ children }: AppShellProps) {
                     ))}
                   </div>
                   <div className="pencil-line my-2" />
-                  <Link href="/app/settings">
+                  <div className="space-y-2 pt-1">
+                    <Link href="/app/settings">
+                      <button
+                        type="button"
+                        onClick={() => setMobileOpen(false)}
+                        className="w-full sketch-button text-left px-3 py-2 transition-colors flex items-center gap-2 bg-background hover:bg-muted"
+                        style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.05rem", fontWeight: 700 }}
+                      >
+                        <Settings size={15} />
+                        Settings
+                      </button>
+                    </Link>
                     <button
                       type="button"
-                      onClick={() => setMobileOpen(false)}
-                      className="w-full sketch-button text-left px-3 py-2 transition-colors flex items-center gap-2 bg-background hover:bg-muted"
+                      onClick={() => {
+                        setMobileOpen(false);
+                        logoutMutation.mutate();
+                      }}
+                      className="w-full sketch-button text-left px-3 py-2 text-destructive transition-colors flex items-center gap-2 bg-background hover:bg-destructive/10"
                       style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.05rem", fontWeight: 700 }}
                     >
-                      <Settings size={15} />
-                      Settings
+                      <LogOut size={15} />
+                      Log out
                     </button>
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileOpen(false);
-                      logoutMutation.mutate();
-                    }}
-                    className="w-full sketch-button text-left px-3 py-2 text-destructive transition-colors flex items-center gap-2 bg-background hover:bg-destructive/10"
-                    style={{ fontFamily: "'Space Mono', monospace", fontSize: "1.05rem", fontWeight: 700 }}
-                  >
-                    <LogOut size={15} />
-                    Log out
-                  </button>
+                  </div>
                 </div>
                 </motion.div>
               </>
@@ -427,7 +468,7 @@ export default function AppShell({ children }: AppShellProps) {
             </span>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Bottom-right credits */}
       <div className="fixed right-4 bottom-4 z-[60] flex flex-col items-end gap-2" ref={creditsRef}>
@@ -476,6 +517,59 @@ export default function AppShell({ children }: AppShellProps) {
           <Star size={16} fill="currentColor" />
         </button>
       </div>
+
+      <AnimatePresence>
+        {rankInsightsOpen && (
+          <>
+            <motion.button
+              type="button"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.14 }}
+              className="fixed inset-0 z-[240] bg-[oklch(0.18_0.02_60_/_0.42)]"
+              onClick={() => setRankInsightsOpen(false)}
+              aria-label="Close rank insights"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.16 }}
+              className="fixed inset-0 z-[250] flex items-center justify-center p-4"
+            >
+              <div className="sketch-card w-full max-w-sm p-4">
+                <div className="flex items-center justify-between">
+                  <h3 style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.04em", fontSize: "1.2rem" }}>
+                    Rank KPI
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setRankInsightsOpen(false)}
+                    className="sketch-button h-9 w-9 p-0 bg-background flex items-center justify-center leading-none"
+                    aria-label="Close rank insights"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+                <div className="pencil-line my-3" />
+                <div className="space-y-2 text-sm" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                  <p><Trophy size={14} className="inline mr-1" /> Rank: <b>#{stats?.rank ?? "-"}</b></p>
+                  <p>Total public users: <b>{usersCount ?? "-"}</b></p>
+                  <p>
+                    {percentile == null
+                      ? "Ranking percentile unavailable yet."
+                      : `You are in the top ${percentile}% of users.`}
+                  </p>
+                  <p>
+                    Group: <b>{cohortLabel}</b>
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

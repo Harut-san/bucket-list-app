@@ -50,9 +50,11 @@ export default function PublicShell({ children }: PublicShellProps) {
   }, [creditsOpen]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start py-6 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-start p-5 md:p-[70px]">
       {/* Main card */}
-      <div
+      <motion.div
+        layout
+        transition={{ layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] } }}
         className="w-full max-w-3xl sketch-card thin-typography relative"
         style={{ minHeight: "80vh" }}
       >
@@ -144,7 +146,7 @@ export default function PublicShell({ children }: PublicShellProps) {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.14 }}
-                  className="md:hidden fixed inset-0 z-[110] bg-[oklch(0.18_0.02_60_/_0.38)]"
+                  className="md:hidden fixed inset-0 z-[200] bg-[oklch(0.18_0.02_60_/_0.38)]"
                   onClick={() => setMobileOpen(false)}
                   aria-label="Close menu overlay"
                 />
@@ -153,20 +155,20 @@ export default function PublicShell({ children }: PublicShellProps) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.98 }}
                   transition={{ duration: 0.16 }}
-                  className="md:hidden absolute right-2 top-[calc(100%+0.25rem)] z-[120] w-[17rem] max-w-[92vw] overflow-visible"
+                  className="md:hidden fixed right-4 top-6 z-[210] w-[17rem] max-w-[92vw] overflow-visible"
                 >
                   <div className="sketch-border p-2 bg-[oklch(0.97_0.018_82)]">
                     <div className="flex justify-end mb-1">
                       <button
                         type="button"
                         onClick={() => setMobileOpen(false)}
-                        className="sketch-button h-9 w-9 p-0 bg-background"
+                        className="sketch-button h-9 w-9 p-0 bg-background flex items-center justify-center leading-none"
                         aria-label="Close menu"
                       >
-                        <X size={16} />
+                        <X size={17} />
                       </button>
                     </div>
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                   {publicNavItems.map((item) => (
                     <Link key={item.href} href={item.href}>
                       <button
@@ -183,11 +185,12 @@ export default function PublicShell({ children }: PublicShellProps) {
                   ))}
                   </div>
                   <div className="pencil-line my-2" />
+                  <div className="space-y-2 pt-1">
                   <Link href="/login" className="block">
                   <button
                       type="button"
                       onClick={() => setMobileOpen(false)}
-                      className="sketch-button auth-stack-button w-full h-8 px-2 text-xs mb-2"
+                      className="sketch-button auth-stack-button w-full h-8 px-2 text-xs"
                       style={{
                         fontFamily: "'Space Mono', monospace",
                         background: "oklch(0.95 0.015 82)",
@@ -211,6 +214,7 @@ export default function PublicShell({ children }: PublicShellProps) {
                       [SIGN_UP]
                     </button>
                   </Link>
+                  </div>
                 </div>
                 </motion.div>
               </>
@@ -243,7 +247,7 @@ export default function PublicShell({ children }: PublicShellProps) {
             <span>dream big</span>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Bottom-right credits */}
       <div className="fixed right-4 bottom-4 z-[60] flex flex-col items-end gap-2" ref={creditsRef}>

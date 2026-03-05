@@ -19,7 +19,7 @@ export default function About() {
           </h3>
           <p className="text-sm leading-relaxed" style={{ fontFamily: "'Courier Prime', monospace" }}>
             Bucket List is your personal space to capture the experiences, adventures, and dreams
-            you want to accomplish in this lifetime. Think of it as a living document — a sketch
+            you want to accomplish in this lifetime. Think of it as a living document - a sketch
             of the life you're designing, one goal at a time.
           </p>
         </div>

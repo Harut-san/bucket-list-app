@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { normalizeAvatarEmoji } from "@shared/const";
+import { motion } from "framer-motion";
 import {
   DndContext,
   closestCenter,
@@ -117,10 +118,10 @@ async function renderGoalsSnapshot(options: {
   items: BucketItem[];
 }) {
   const width = 1080;
-  const height = 1920;
   const rowHeight = 92;
   const listTop = 500;
-  const maxRows = Math.min(14, options.items.length);
+  const contentBottom = listTop + options.items.length * rowHeight;
+  const height = Math.max(1920, contentBottom + 180);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -161,7 +162,7 @@ async function renderGoalsSnapshot(options: {
   ctx.fillText("Filtered goals", 108, 436);
 
   ctx.font = "600 30px 'Space Mono'";
-  options.items.slice(0, maxRows).forEach((item, index) => {
+  options.items.forEach((item, index) => {
     const rowY = listTop + index * rowHeight;
     ctx.fillStyle = "#f9f2e7";
     ctx.strokeStyle = "#2c2117";
@@ -194,6 +195,79 @@ async function renderGoalsSnapshot(options: {
       resolve(blob);
     }, "image/png");
   });
+}
+
+type QuizAnswers = {
+  vibe: "travel" | "creative" | "adrenaline" | null;
+  style: "solo" | "social" | "challenge" | null;
+  pace: "quick" | "medium" | "long" | null;
+};
+
+type QuizSuggestion = {
+  title: string;
+  category: string;
+};
+
+function buildQuizSuggestions(answers: QuizAnswers): QuizSuggestion[] {
+  const byVibe: Record<NonNullable<QuizAnswers["vibe"]>, QuizSuggestion[]> = {
+    travel: [
+      { title: "Visit 3 European cities", category: "Travel" },
+      { title: "Take a sunrise train trip", category: "Travel" },
+      { title: "Spend a week in a new country", category: "Adventure" },
+    ],
+    creative: [
+      { title: "Ship a tiny personal website", category: "Creative" },
+      { title: "Learn street photography basics", category: "Skills" },
+      { title: "Create a 30-day sketch challenge", category: "Creative" },
+    ],
+    adrenaline: [
+      { title: "Try indoor climbing", category: "Adventure" },
+      { title: "Run your first 10K race", category: "Fitness" },
+      { title: "Do a mountain trail weekend", category: "Adventure" },
+    ],
+  };
+
+  const byStyle: Record<NonNullable<QuizAnswers["style"]>, QuizSuggestion[]> = {
+    solo: [
+      { title: "Take yourself on a solo date day", category: "Personal" },
+      { title: "Read 12 books in a year", category: "Learning" },
+    ],
+    social: [
+      { title: "Host a themed dinner night", category: "Food" },
+      { title: "Plan a group road trip", category: "Travel" },
+    ],
+    challenge: [
+      { title: "Learn 100 new words in a language", category: "Learning" },
+      { title: "Build a 90-day habit streak", category: "Personal" },
+    ],
+  };
+
+  const byPace: Record<NonNullable<QuizAnswers["pace"]>, QuizSuggestion[]> = {
+    quick: [
+      { title: "Try one new hobby this month", category: "Skills" },
+      { title: "Visit one museum this weekend", category: "Learning" },
+    ],
+    medium: [
+      { title: "Complete a 6-week fitness plan", category: "Fitness" },
+      { title: "Take a short online course", category: "Career" },
+    ],
+    long: [
+      { title: "Save for a dream trip", category: "Travel" },
+      { title: "Volunteer in a community project", category: "Service" },
+    ],
+  };
+
+  const combined = [
+    ...byVibe[(answers.vibe ?? "travel") as NonNullable<QuizAnswers["vibe"]>],
+    ...byStyle[(answers.style ?? "solo") as NonNullable<QuizAnswers["style"]>],
+    ...byPace[(answers.pace ?? "quick") as NonNullable<QuizAnswers["pace"]>],
+  ];
+
+  const deduped = new Map<string, QuizSuggestion>();
+  for (const suggestion of combined) {
+    deduped.set(suggestion.title.toLowerCase(), suggestion);
+  }
+  return Array.from(deduped.values()).slice(0, 6);
 }
 
 // ─── Goal Form Modal ──────────────────────────────────────────────
@@ -286,7 +360,7 @@ function GoalForm({ initial, onSave, onCancel, saving }: GoalFormProps) {
               value={category}
               onChange={(e) => setCategory(e.target.value)}
             >
-              <option value="">— none —</option>
+              <option value="">- none -</option>
               {CATEGORIES.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
@@ -455,7 +529,9 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <div
+    <motion.div
+      layout
+      transition={{ layout: { duration: 0.2, ease: [0.22, 1, 0.36, 1] } }}
       ref={setNodeRef}
       style={style}
       onClick={() => {
@@ -562,7 +638,7 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
           {confirmDelete ? <Check size={13} /> : <Trash2 size={13} />}
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -570,8 +646,14 @@ function GoalItem({ item, onToggle, onEdit, onOpen, onDelete, isDragging }: Goal
 export default function MyBucketList() {
   const utils = trpc.useUtils();
   const { user } = useAuth();
-  const { data: items = [], isLoading } = trpc.bucketList.list.useQuery();
-  const { data: settings } = trpc.settings.get.useQuery();
+  const { data: items = [], isLoading } = trpc.bucketList.list.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const { data: settings } = trpc.settings.get.useQuery(undefined, {
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
 
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<BucketItem | null>(null);
@@ -579,6 +661,15 @@ export default function MyBucketList() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [quickShareCopied, setQuickShareCopied] = useState(false);
+  const [quizOpen, setQuizOpen] = useState(false);
+  const [quizAnswers, setQuizAnswers] = useState<QuizAnswers>({
+    vibe: null,
+    style: null,
+    pace: null,
+  });
+  const [quizSuggestions, setQuizSuggestions] = useState<QuizSuggestion[]>([]);
+  const [addingQuizSuggestions, setAddingQuizSuggestions] = useState(false);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [dragOverlayWidth, setDragOverlayWidth] = useState<number | null>(null);
   const displayItems = selectedCategory
@@ -670,6 +761,7 @@ export default function MyBucketList() {
       utils.bucketList.list.invalidate();
     },
   });
+  const addGoalSilently = trpc.bucketList.add.useMutation();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -751,6 +843,57 @@ export default function MyBucketList() {
     }
   };
 
+  const handleShareButtonClick = async () => {
+    if (items.length === 0) {
+      try {
+        await navigator.clipboard.writeText("https://bucketlist.harut.pl");
+        setQuickShareCopied(true);
+        window.setTimeout(() => setQuickShareCopied(false), 2000);
+      } catch {
+        toast.error("Failed to copy app link");
+      }
+      return;
+    }
+    setShareOpen(true);
+  };
+
+  const handleGenerateQuizSuggestions = () => {
+    if (!quizAnswers.vibe || !quizAnswers.style || !quizAnswers.pace) {
+      toast.error("Answer all 3 questions first");
+      return;
+    }
+    setQuizSuggestions(buildQuizSuggestions(quizAnswers));
+  };
+
+  const handleAddQuizSuggestions = async () => {
+    if (quizSuggestions.length === 0) return;
+    setAddingQuizSuggestions(true);
+    try {
+      const results = await Promise.allSettled(
+        quizSuggestions.map((goal) =>
+          addGoalSilently.mutateAsync({
+            title: goal.title,
+            category: goal.category,
+          })
+        )
+      );
+      const successCount = results.filter((result) => result.status === "fulfilled").length;
+      if (successCount > 0) {
+        await utils.bucketList.list.invalidate();
+        await utils.bucketList.stats.invalidate();
+        toast.success(`${successCount} goals added`);
+      }
+      if (successCount !== quizSuggestions.length) {
+        toast.error("Some goals failed to add");
+      }
+      setQuizOpen(false);
+      setQuizSuggestions([]);
+      setQuizAnswers({ vibe: null, style: null, pace: null });
+    } finally {
+      setAddingQuizSuggestions(false);
+    }
+  };
+
   const handleCopySnapshot = async () => {
     try {
       const yearLabel = selectedYear ? `Year ${selectedYear}` : "All years";
@@ -793,18 +936,18 @@ export default function MyBucketList() {
           </h2>
           <p className="text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: "'Courier Prime', monospace" }}>
             {total === 0
-              ? "no goals yet — add your first one!"
+              ? "no goals yet - add your first one!"
               : `${achieved} of ${total} goals achieved`}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setShareOpen(true)}
-            className="sketch-button px-3 py-2 bg-background flex items-center gap-2"
+            onClick={() => void handleShareButtonClick()}
+            className={`sketch-button px-3 py-2 flex items-center gap-2 ${quickShareCopied ? "bg-green-100 text-green-800 border-green-600" : "bg-background"}`}
           >
             <Share2 size={15} />
-            Share
+            {quickShareCopied ? "Copied" : "Share"}
           </button>
           <button
             onClick={() => setShowForm(true)}
@@ -901,13 +1044,14 @@ export default function MyBucketList() {
         </div>
       )}
 
+      <motion.div layout transition={{ layout: { duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}>
       {isLoading ? (
-        <div className="flex items-center justify-center py-16 gap-3">
+        <motion.div layout className="flex items-center justify-center py-16 gap-3">
           <Loader2 className="animate-spin" size={20} />
           <span style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em", fontSize: "1.2rem" }}>Loading your list...</span>
-        </div>
+        </motion.div>
       ) : items.length === 0 ? (
-        <div className="sketch-border-dashed p-10 text-center">
+        <motion.div layout className="sketch-border-dashed p-10 text-center">
           <div className="text-6xl mb-4">✦</div>
           <p className="text-2xl font-bold mb-2" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}>
             Your bucket list is empty
@@ -919,21 +1063,28 @@ export default function MyBucketList() {
             onClick={() => setShowForm(true)}
             className="sketch-button px-6 py-2 bg-foreground text-background"
           >
-            Add your first goal →
+            Add your first goal -&gt;
           </button>
-        </div>
+          <button
+            type="button"
+            onClick={() => setQuizOpen(true)}
+            className="sketch-button px-6 py-2 bg-background mt-2"
+          >
+            Quick quiz
+          </button>
+        </motion.div>
       ) : selectedCategory ? (
         displayItems.length === 0 ? (
-          <div className="sketch-border-dashed p-8 text-center">
+          <motion.div layout className="sketch-border-dashed p-8 text-center">
             <p className="text-lg font-bold mb-1" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.05em" }}>
               No goals in {selectedCategory}
             </p>
             <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
               Pick another category or add a new goal.
             </p>
-          </div>
+          </motion.div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <motion.div layout className="flex flex-col gap-2">
             {displayItems.map((item) => (
               <GoalItem
                 key={item.id}
@@ -947,7 +1098,7 @@ export default function MyBucketList() {
                 onDelete={(id) => deleteMutation.mutate({ id })}
               />
             ))}
-          </div>
+          </motion.div>
         )
       ) : (
         <DndContext
@@ -958,7 +1109,7 @@ export default function MyBucketList() {
           onDragCancel={handleDragCancel}
         >
           <SortableContext items={displayItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-            <div className="flex flex-col gap-2">
+            <motion.div layout className="flex flex-col gap-2">
               {displayItems.map((item) => (
                 <GoalItem
                   key={item.id}
@@ -972,7 +1123,7 @@ export default function MyBucketList() {
                   onDelete={(id) => deleteMutation.mutate({ id })}
                 />
               ))}
-            </div>
+            </motion.div>
           </SortableContext>
 
           <DragOverlay dropAnimation={null}>
@@ -1025,6 +1176,7 @@ export default function MyBucketList() {
           </DragOverlay>
         </DndContext>
       )}
+      </motion.div>
 
       {/* Hint */}
       {total > 1 && (
@@ -1064,6 +1216,120 @@ export default function MyBucketList() {
           saving={updateMutation.isPending}
         />
       )}
+      {quizOpen &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[140] flex items-center justify-center p-4"
+            style={{ background: "oklch(0.18 0.02 60 / 0.55)" }}
+            onClick={() => {
+              setQuizOpen(false);
+              setQuizSuggestions([]);
+            }}
+          >
+            <div className="sketch-card w-full max-w-lg p-4" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-center justify-between mb-2">
+                <h3 style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.04em", fontSize: "1.25rem" }}>
+                  Bucket List Quiz
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuizOpen(false);
+                    setQuizSuggestions([]);
+                  }}
+                  className="sketch-button h-9 w-9 p-0 bg-background flex items-center justify-center leading-none"
+                  aria-label="Close quiz"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+              {!quizSuggestions.length ? (
+                <div className="space-y-3">
+                  <label className="block text-xs" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                    1) What vibe fits you best?
+                    <select
+                      className="sketch-input w-full px-3 py-2 text-sm mt-1"
+                      value={quizAnswers.vibe ?? ""}
+                      onChange={(event) => setQuizAnswers((prev) => ({ ...prev, vibe: event.target.value as QuizAnswers["vibe"] }))}
+                    >
+                      <option value="">- select -</option>
+                      <option value="travel">Travel explorer</option>
+                      <option value="creative">Creative builder</option>
+                      <option value="adrenaline">Adrenaline seeker</option>
+                    </select>
+                  </label>
+                  <label className="block text-xs" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                    2) How do you like goals?
+                    <select
+                      className="sketch-input w-full px-3 py-2 text-sm mt-1"
+                      value={quizAnswers.style ?? ""}
+                      onChange={(event) => setQuizAnswers((prev) => ({ ...prev, style: event.target.value as QuizAnswers["style"] }))}
+                    >
+                      <option value="">- select -</option>
+                      <option value="solo">Solo mode</option>
+                      <option value="social">With friends</option>
+                      <option value="challenge">Hard challenge</option>
+                    </select>
+                  </label>
+                  <label className="block text-xs" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                    3) Time horizon?
+                    <select
+                      className="sketch-input w-full px-3 py-2 text-sm mt-1"
+                      value={quizAnswers.pace ?? ""}
+                      onChange={(event) => setQuizAnswers((prev) => ({ ...prev, pace: event.target.value as QuizAnswers["pace"] }))}
+                    >
+                      <option value="">- select -</option>
+                      <option value="quick">This month</option>
+                      <option value="medium">This year</option>
+                      <option value="long">Long game</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleGenerateQuizSuggestions}
+                    className="sketch-button px-4 py-2 bg-foreground text-background"
+                  >
+                    Generate 6 goals
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm mb-3" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                    We picked 6 suggestions. Add them to your list?
+                  </p>
+                  <div className="space-y-2 mb-4">
+                    {quizSuggestions.map((goal) => (
+                      <div key={goal.title} className="sketch-border px-3 py-2 bg-background/70">
+                        <p style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>{goal.title}</p>
+                        <p className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                          Category: {goal.category}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setQuizSuggestions([])}
+                      className="sketch-button px-4 py-2 bg-background"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleAddQuizSuggestions()}
+                      disabled={addingQuizSuggestions}
+                      className="sketch-button px-4 py-2 bg-foreground text-background disabled:opacity-60"
+                    >
+                      {addingQuizSuggestions ? "Adding..." : "Add all 6 goals"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
       {shareOpen &&
         createPortal(
           <div
@@ -1084,10 +1350,10 @@ export default function MyBucketList() {
                 <button
                   type="button"
                   onClick={() => setShareOpen(false)}
-                  className="sketch-button h-9 w-9 p-0 bg-background"
+                  className="sketch-button h-9 w-9 p-0 bg-background flex items-center justify-center leading-none"
                   aria-label="Close share options"
                 >
-                  <X size={15} />
+                  <X size={17} />
                 </button>
               </div>
               <p className="text-xs text-muted-foreground mb-3 leading-relaxed" style={{ fontFamily: "'Courier Prime', monospace" }}>
@@ -1101,7 +1367,7 @@ export default function MyBucketList() {
                   style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
                 >
                   <Link2 size={14} />
-                  Copy filtered link
+                  Copy link
                 </button>
                 <button
                   type="button"
@@ -1110,7 +1376,7 @@ export default function MyBucketList() {
                   style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
                 >
                   <ImageDown size={14} />
-                  Copy filtered snapshot
+                  Copy snapshot
                 </button>
               </div>
             </div>

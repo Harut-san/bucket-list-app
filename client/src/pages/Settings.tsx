@@ -1,8 +1,8 @@
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { AVATAR_EMOJIS, DEFAULT_AVATAR_EMOJI, normalizeAvatarEmoji } from "@shared/const";
-import { useState, useEffect } from "react";
-import { Loader2, Check, Eye, EyeOff } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Loader2, Check, Eye, EyeOff, Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -14,29 +14,133 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import UserAvatar from "@/components/UserAvatar";
+import { PUBLIC_APP_URL } from "@/const";
+
+const CROPPER_SIZE = 280;
+const OUTPUT_SIZE = 512;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+async function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Failed to read image"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Failed to load image"));
+    image.src = src;
+  });
+}
+
+async function createCroppedDataUrl(options: {
+  source: string;
+  offsetX: number;
+  offsetY: number;
+  zoom: number;
+}) {
+  const image = await loadImage(options.source);
+  const baseScale = Math.max(CROPPER_SIZE / image.width, CROPPER_SIZE / image.height);
+  const effectiveScale = baseScale * options.zoom;
+  const drawWidth = image.width * effectiveScale;
+  const drawHeight = image.height * effectiveScale;
+  const drawX = (CROPPER_SIZE - drawWidth) / 2 + options.offsetX;
+  const drawY = (CROPPER_SIZE - drawHeight) / 2 + options.offsetY;
+  const ratio = OUTPUT_SIZE / CROPPER_SIZE;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = OUTPUT_SIZE;
+  canvas.height = OUTPUT_SIZE;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  ctx.fillStyle = "#f7f2e7";
+  ctx.fillRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+  ctx.drawImage(
+    image,
+    drawX * ratio,
+    drawY * ratio,
+    drawWidth * ratio,
+    drawHeight * ratio
+  );
+  return canvas.toDataURL("image/webp", 0.9);
+}
 
 export default function Settings() {
   const { user } = useAuth();
-  const { data: settings, isLoading } = trpc.settings.get.useQuery();
+  const { data: settings, isLoading } = trpc.settings.get.useQuery(undefined, {
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
   const utils = trpc.useUtils();
 
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [avatarEmoji, setAvatarEmoji] = useState<string>(DEFAULT_AVATAR_EMOJI);
+  const [avatarImageUrl, setAvatarImageUrl] = useState<string | null>(null);
   const [isPublic, setIsPublic] = useState(true);
   const [saved, setSaved] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [cropSource, setCropSource] = useState<string | null>(null);
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
+  const [cropBounds, setCropBounds] = useState({ minX: 0, maxX: 0, minY: 0, maxY: 0 });
+  const [cropBaseSize, setCropBaseSize] = useState({ width: CROPPER_SIZE, height: CROPPER_SIZE });
+  const [uploadedAt, setUploadedAt] = useState(0);
+  const cropStart = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
 
   useEffect(() => {
     if (settings) {
       setDisplayName(settings.displayName ?? user?.name ?? "");
       setBio(settings.bio ?? "");
       setAvatarEmoji(normalizeAvatarEmoji(settings.avatarEmoji));
+      setAvatarImageUrl(settings.avatarImageUrl ?? null);
       setIsPublic(settings.isPublic ?? true);
     } else if (user) {
       setDisplayName(user.name ?? "");
     }
   }, [settings, user]);
+
+  useEffect(() => {
+    if (!cropSource) return;
+    let active = true;
+    loadImage(cropSource)
+      .then((image) => {
+        if (!active) return;
+        const baseScale = Math.max(CROPPER_SIZE / image.width, CROPPER_SIZE / image.height);
+        const baseWidth = image.width * baseScale;
+        const baseHeight = image.height * baseScale;
+        const drawWidth = baseWidth * cropZoom;
+        const drawHeight = baseHeight * cropZoom;
+        const nextBounds = {
+          minX: (drawWidth - CROPPER_SIZE) * -0.5,
+          maxX: (drawWidth - CROPPER_SIZE) * 0.5,
+          minY: (drawHeight - CROPPER_SIZE) * -0.5,
+          maxY: (drawHeight - CROPPER_SIZE) * 0.5,
+        };
+        setCropBaseSize({ width: baseWidth, height: baseHeight });
+        setCropBounds(nextBounds);
+        setCropOffset((prev) => ({
+          x: clamp(prev.x, nextBounds.minX, nextBounds.maxX),
+          y: clamp(prev.y, nextBounds.minY, nextBounds.maxY),
+        }));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [cropSource, cropZoom]);
 
   const updateMutation = trpc.settings.update.useMutation({
     onSuccess: () => {
@@ -47,10 +151,15 @@ export default function Settings() {
     },
     onError: () => toast.error("Failed to save settings"),
   });
+  const uploadAvatarMutation = trpc.settings.uploadAvatar.useMutation({
+    onError: () => toast.error("Failed to upload avatar image"),
+  });
   const deleteAccountMutation = trpc.auth.deleteAccount.useMutation({
     onSuccess: () => {
-      toast.success("Account deleted");
-      window.location.href = "/";
+      toast.success("Account deleted successfully");
+      window.setTimeout(() => {
+        window.location.href = PUBLIC_APP_URL;
+      }, 250);
     },
     onError: () => toast.error("Failed to delete account"),
   });
@@ -61,8 +170,48 @@ export default function Settings() {
       displayName: displayName.trim() || undefined,
       bio: bio.trim() || undefined,
       avatarEmoji: normalizeAvatarEmoji(avatarEmoji),
+      avatarImageUrl,
       isPublic,
     });
+  };
+
+  const handlePickAvatarFile = async (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please pick an image file");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Image must be under 8MB");
+      return;
+    }
+    try {
+      const source = await fileToDataUrl(file);
+      setCropSource(source);
+      setCropZoom(1);
+      setCropOffset({ x: 0, y: 0 });
+    } catch {
+      toast.error("Failed to open image");
+    }
+  };
+
+  const handleApplyAvatarCrop = async () => {
+    if (!cropSource) return;
+    try {
+      const croppedDataUrl = await createCroppedDataUrl({
+        source: cropSource,
+        offsetX: cropOffset.x,
+        offsetY: cropOffset.y,
+        zoom: cropZoom,
+      });
+      const uploaded = await uploadAvatarMutation.mutateAsync({ dataUrl: croppedDataUrl });
+      setAvatarImageUrl(uploaded.url);
+      setUploadedAt(Date.now());
+      setCropSource(null);
+      toast.success("Avatar photo uploaded");
+    } catch {
+      toast.error("Failed to crop or upload image");
+    }
   };
 
   const handleDeleteAccount = () => {
@@ -100,6 +249,40 @@ export default function Settings() {
 
           {/* Avatar picker */}
           <div className="mb-4">
+            <label className="block text-xs mb-2 text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
+              Avatar photo (optional)
+            </label>
+            <div className="flex items-center gap-3 flex-wrap mb-3">
+              <UserAvatar
+                avatarEmoji={avatarEmoji}
+                avatarImageUrl={avatarImageUrl}
+                className="w-14 h-14 text-2xl"
+                key={`${avatarImageUrl ?? "emoji"}-${uploadedAt}`}
+              />
+              <label className="sketch-button px-3 py-2 bg-background inline-flex items-center gap-2 cursor-pointer">
+                <Upload size={14} />
+                Upload + crop
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    void handlePickAvatarFile(event.target.files?.[0] ?? null);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
+              {avatarImageUrl && (
+                <button
+                  type="button"
+                  className="sketch-button px-3 py-2 bg-background text-destructive inline-flex items-center gap-2"
+                  onClick={() => setAvatarImageUrl(null)}
+                >
+                  <Trash2 size={14} />
+                  Remove photo
+                </button>
+              )}
+            </div>
             <label className="block text-xs mb-2 text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
               Avatar emoji
             </label>
@@ -212,11 +395,11 @@ export default function Settings() {
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>Email</span>
-              <span className="text-sm" style={{ fontFamily: "'Courier Prime', monospace" }}>{user?.email ?? "—"}</span>
+              <span className="text-sm" style={{ fontFamily: "'Courier Prime', monospace" }}>{user?.email ?? "-"}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>Name</span>
-              <span className="text-sm" style={{ fontFamily: "'Courier Prime', monospace" }}>{user?.name ?? "—"}</span>
+              <span className="text-sm" style={{ fontFamily: "'Courier Prime', monospace" }}>{user?.name ?? "-"}</span>
             </div>
           </div>
           <div className="pencil-line my-4" />
@@ -247,6 +430,95 @@ export default function Settings() {
           {saved ? "Saved!" : "Save settings"}
         </button>
       </form>
+      {cropSource && (
+        <div
+          className="fixed inset-0 z-[1000] flex items-start justify-center overflow-y-auto p-4 md:items-center"
+          style={{ background: "oklch(0.18 0.02 60 / 0.55)" }}
+          onClick={() => setCropSource(null)}
+        >
+          <div
+            className="sketch-card mt-14 w-full max-w-md p-4 md:mt-0"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 className="text-xl font-bold mb-2" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, letterSpacing: "0.04em" }}>
+              Crop avatar photo
+            </h3>
+            <p className="text-xs text-muted-foreground mb-3 sketch-border-dashed px-3 py-2 bg-background/70" style={{ fontFamily: "'Courier Prime', monospace" }}>
+              Drag to reposition and use zoom to fit your face.
+            </p>
+            <div className="flex justify-center mb-3">
+              <div
+                className="relative overflow-hidden rounded-full sketch-border bg-background"
+                style={{ width: CROPPER_SIZE, height: CROPPER_SIZE, touchAction: "none" }}
+                onPointerDown={(event) => {
+                  (event.target as HTMLElement).setPointerCapture(event.pointerId);
+                  cropStart.current = {
+                    x: event.clientX,
+                    y: event.clientY,
+                    offsetX: cropOffset.x,
+                    offsetY: cropOffset.y,
+                  };
+                }}
+                onPointerMove={(event) => {
+                  if (!cropStart.current) return;
+                  const deltaX = event.clientX - cropStart.current.x;
+                  const deltaY = event.clientY - cropStart.current.y;
+                  setCropOffset({
+                    x: clamp(cropStart.current.offsetX + deltaX, cropBounds.minX, cropBounds.maxX),
+                    y: clamp(cropStart.current.offsetY + deltaY, cropBounds.minY, cropBounds.maxY),
+                  });
+                }}
+                onPointerUp={() => {
+                  cropStart.current = null;
+                }}
+                onPointerCancel={() => {
+                  cropStart.current = null;
+                }}
+              >
+                <img
+                  src={cropSource}
+                  alt="Avatar crop source"
+                  className="absolute top-1/2 left-1/2 select-none pointer-events-none"
+                  style={{
+                    transform: `translate(calc(-50% + ${cropOffset.x}px), calc(-50% + ${cropOffset.y}px)) scale(${cropZoom})`,
+                    transformOrigin: "center center",
+                    width: cropBaseSize.width,
+                    height: cropBaseSize.height,
+                  }}
+                />
+              </div>
+            </div>
+            <div className="mb-4">
+              <label className="text-xs text-muted-foreground block mb-1" style={{ fontFamily: "'Courier Prime', monospace" }}>
+                Zoom
+              </label>
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.01}
+                value={cropZoom}
+                onChange={(event) => setCropZoom(Number(event.target.value))}
+                className="zoom-range w-full"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="sketch-button px-4 py-2 bg-background" onClick={() => setCropSource(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sketch-button px-4 py-2 bg-foreground text-background inline-flex items-center gap-2 disabled:opacity-60"
+                disabled={uploadAvatarMutation.isPending}
+                onClick={() => void handleApplyAvatarCrop()}
+              >
+                {uploadAvatarMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
+                Apply photo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent className="sketch-card">
           <AlertDialogHeader>

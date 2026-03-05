@@ -1,7 +1,11 @@
 import { z } from "zod/v4";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { COOKIE_NAME, DEFAULT_AVATAR_EMOJI, normalizeAvatarEmoji } from "@shared/const";
 import { compare, hash } from "bcryptjs";
 import { TRPCError } from "@trpc/server";
+import { storagePut } from "./storage";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -25,11 +29,24 @@ import {
   getTopGoals,
   getTopGoalsByYear,
   getTopUsersByYear,
+  getPublicUsersCount,
   getUserYearlySummary,
   getPublicShareProfile,
   getLeaderboardAvailableYears,
 } from "./db";
 import { attachSessionCookie, createSessionToken } from "./_core/auth";
+
+const LOCAL_AVATAR_DIR = path.join(os.tmpdir(), "bucket-list-app-avatars");
+
+async function saveAvatarLocally(userId: number, buffer: Buffer, extension: string) {
+  const safeExtension = extension.replace(/[^a-z0-9]/gi, "").toLowerCase() || "webp";
+  const userDir = path.join(LOCAL_AVATAR_DIR, String(userId));
+  await fs.mkdir(userDir, { recursive: true });
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${safeExtension}`;
+  const absolutePath = path.join(userDir, fileName);
+  await fs.writeFile(absolutePath, buffer);
+  return `/api/uploads/avatars/${userId}/${fileName}`;
+}
 
 function toClientUser(user: {
   id: number;
@@ -221,6 +238,11 @@ export const appRouter = router({
         return getTopUsersByYear(100, input?.year);
       }),
 
+    usersCount: publicProcedure.query(async () => {
+      const count = await getPublicUsersCount();
+      return { count };
+    }),
+
     availableYears: publicProcedure.query(async () => {
       return getLeaderboardAvailableYears();
     }),
@@ -281,19 +303,54 @@ export const appRouter = router({
       .input(
         z.object({
           displayName: z.string().max(128).optional(),
-          bio: z.string().max(500).optional(),
+          bio: z.string().max(500).nullable().optional(),
           avatarEmoji: z.string().max(32).optional(),
+          avatarImageUrl: z.string().max(2048).nullable().optional(),
           isPublic: z.boolean().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         return upsertUserSettings(ctx.user.id, {
           ...input,
+          bio: input.bio ?? undefined,
           avatarEmoji:
             input.avatarEmoji === undefined
               ? undefined
               : normalizeAvatarEmoji(input.avatarEmoji),
         });
+      }),
+
+    uploadAvatar: protectedProcedure
+      .input(
+        z.object({
+          dataUrl: z.string().max(20_000_000),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const matches = input.dataUrl.match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/);
+        if (!matches) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Unsupported image format" });
+        }
+
+        const mimeType = matches[1];
+        const base64Payload = matches[2];
+        const buffer = Buffer.from(base64Payload, "base64");
+        const maxBytes = 4 * 1024 * 1024;
+        if (!buffer.length || buffer.length > maxBytes) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Image must be under 4MB" });
+        }
+
+        const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+        let url: string;
+        try {
+          const key = `avatars/${ctx.user.id}/${Date.now()}.${extension}`;
+          const uploaded = await storagePut(key, buffer, mimeType);
+          url = uploaded.url;
+        } catch (error) {
+          console.warn("[settings.uploadAvatar] Remote storage unavailable, falling back to local file storage", error);
+          url = await saveAvatarLocally(ctx.user.id, buffer, extension);
+        }
+        return { url };
       }),
   }),
 

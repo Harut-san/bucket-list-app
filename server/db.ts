@@ -183,23 +183,27 @@ export async function getBucketStats(userId: number) {
   const db = await getDb();
   if (!db) return { total: 0, achieved: 0, rank: null };
 
-  const items = await db
-    .select({ achieved: bucketItems.achieved })
-    .from(bucketItems)
-    .where(eq(bucketItems.userId, userId));
-
-  const total = items.length;
-  const achieved = items.filter((i) => i.achieved).length;
+  const totalsResult = await db.execute(
+    sql`SELECT
+        COUNT(*) as total,
+        COALESCE(SUM(CASE WHEN b.achieved = 1 THEN 1 ELSE 0 END), 0) as achieved
+      FROM bucket_items b
+      WHERE b.userId = ${userId}`
+  );
+  const totalsRow = (totalsResult as any)?.[0]?.[0] ?? { total: 0, achieved: 0 };
+  const total = Number(totalsRow.total ?? 0);
+  const achieved = Number(totalsRow.achieved ?? 0);
 
   // Get rank: count users with more achieved items
-  const rankResult = await db.execute(
-    sql`SELECT COUNT(*) as cnt FROM (
-      SELECT userId, SUM(achieved) as cnt
-      FROM bucket_items
-      GROUP BY userId
-      HAVING cnt > ${achieved}
-    ) sub`
-  );
+  const rankResult = await db.execute(sql`
+    SELECT COUNT(*) as cnt
+    FROM (
+      SELECT b.userId, SUM(CASE WHEN b.achieved = 1 THEN 1 ELSE 0 END) as achievedCount
+      FROM bucket_items b
+      GROUP BY b.userId
+      HAVING achievedCount > ${achieved}
+    ) ranked
+  `);
   const rank = Number((rankResult as any)[0]?.[0]?.cnt ?? 0) + 1;
 
   return { total, achieved, rank };
@@ -214,12 +218,12 @@ export async function getLeaderboard(limit = 100) {
     sql`SELECT u.id, u.name, u.email,
         COUNT(CASE WHEN b.achieved = 1 THEN 1 END) as achievedCount,
         COUNT(b.id) as totalCount,
-        us.displayName, us.avatarEmoji, us.isPublic
+        us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
       FROM users u
       LEFT JOIN bucket_items b ON b.userId = u.id
       LEFT JOIN user_settings us ON us.userId = u.id
       WHERE (us.isPublic IS NULL OR us.isPublic = 1)
-      GROUP BY u.id, u.name, u.email, us.displayName, us.avatarEmoji, us.isPublic
+      GROUP BY u.id, u.name, u.email, us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
       HAVING achievedCount > 0
       ORDER BY achievedCount DESC, totalCount ASC
       LIMIT ${limit}`
@@ -233,6 +237,7 @@ export async function getLeaderboard(limit = 100) {
     totalCount: number;
     displayName: string | null;
     avatarEmoji: string | null;
+    avatarImageUrl: string | null;
     isPublic: boolean;
   }>;
 }
@@ -434,7 +439,7 @@ export async function getTopGoalsByYear(limit = 100, year?: number) {
   if (!db) return [];
 
   const yearFilterSql = year
-    ? sql`AND YEAR(b.achievedAt) = ${year}`
+    ? sql`AND EXTRACT(YEAR FROM b.createdAt) = ${year}`
     : sql``;
 
   const result = await db.execute(
@@ -445,8 +450,7 @@ export async function getTopGoalsByYear(limit = 100, year?: number) {
         COUNT(DISTINCT b.userId) as userCount
       FROM bucket_items b
       LEFT JOIN user_settings us ON us.userId = b.userId
-      WHERE b.achieved = 1
-        AND b.achievedAt IS NOT NULL
+      WHERE 1 = 1
         ${yearFilterSql}
         AND b.title IS NOT NULL
         AND TRIM(b.title) <> ''
@@ -475,14 +479,14 @@ export async function getTopUsers(limit = 100) {
         COUNT(b.id) as totalCount,
         COUNT(b.id) as addedCountInYear,
         COUNT(CASE WHEN b.achieved = 1 THEN 1 END) as achievedCountInYear,
-        us.displayName, us.avatarEmoji, us.isPublic
+        us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
       FROM users u
       LEFT JOIN bucket_items b ON b.userId = u.id
       LEFT JOIN user_settings us ON us.userId = u.id
       WHERE (us.isPublic IS NULL OR us.isPublic = 1)
-      GROUP BY u.id, u.name, u.email, us.displayName, us.avatarEmoji, us.isPublic
-      HAVING achievedCount > 0
-      ORDER BY achievedCount DESC, totalCount ASC
+      GROUP BY u.id, u.name, u.email, us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
+      HAVING totalCount > 0
+      ORDER BY achievedCount DESC, totalCount DESC
       LIMIT ${limit}`
   );
 
@@ -496,8 +500,25 @@ export async function getTopUsers(limit = 100) {
     achievedCountInYear: number;
     displayName: string | null;
     avatarEmoji: string | null;
+    avatarImageUrl: string | null;
     isPublic: boolean;
   }>;
+}
+
+export async function getPublicUsersCount() {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db.execute(
+    sql`SELECT COUNT(*) as count
+      FROM users u
+      LEFT JOIN user_settings us ON us.userId = u.id
+      LEFT JOIN bucket_items b ON b.userId = u.id
+      WHERE (us.isPublic IS NULL OR us.isPublic = 1)
+        AND b.id IS NOT NULL`
+  );
+
+  return Number((result as any)[0]?.[0]?.count ?? 0);
 }
 
 export async function getTopUsersByYear(limit = 100, year?: number) {
@@ -510,14 +531,14 @@ export async function getTopUsersByYear(limit = 100, year?: number) {
     sql`SELECT u.id, u.name, u.email,
         COUNT(CASE WHEN b.achieved = 1 THEN 1 END) as achievedCount,
         COUNT(b.id) as totalCount,
-        COUNT(CASE WHEN YEAR(b.createdAt) = ${year} THEN 1 END) as addedCountInYear,
-        COUNT(CASE WHEN b.achieved = 1 AND YEAR(b.achievedAt) = ${year} THEN 1 END) as achievedCountInYear,
-        us.displayName, us.avatarEmoji, us.isPublic
+        COUNT(CASE WHEN EXTRACT(YEAR FROM b.createdAt) = ${year} THEN 1 END) as addedCountInYear,
+        COUNT(CASE WHEN b.achieved = 1 AND EXTRACT(YEAR FROM b.achievedAt) = ${year} THEN 1 END) as achievedCountInYear,
+        us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
       FROM users u
       LEFT JOIN bucket_items b ON b.userId = u.id
       LEFT JOIN user_settings us ON us.userId = u.id
       WHERE (us.isPublic IS NULL OR us.isPublic = 1)
-      GROUP BY u.id, u.name, u.email, us.displayName, us.avatarEmoji, us.isPublic
+      GROUP BY u.id, u.name, u.email, us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
       HAVING (addedCountInYear > 0 OR achievedCountInYear > 0)
       ORDER BY achievedCountInYear DESC, addedCountInYear DESC, achievedCount DESC, totalCount ASC
       LIMIT ${limit}`
@@ -533,6 +554,7 @@ export async function getTopUsersByYear(limit = 100, year?: number) {
     achievedCountInYear: number;
     displayName: string | null;
     avatarEmoji: string | null;
+    avatarImageUrl: string | null;
     isPublic: boolean;
   }>;
 }
@@ -544,12 +566,12 @@ export async function getLeaderboardAvailableYears() {
   const result = await db.execute(
     sql`SELECT DISTINCT yr.year
       FROM (
-        SELECT YEAR(b.createdAt) AS year
+        SELECT EXTRACT(YEAR FROM b.createdAt) AS year
         FROM bucket_items b
         LEFT JOIN user_settings us ON us.userId = b.userId
         WHERE (us.isPublic IS NULL OR us.isPublic = 1)
         UNION
-        SELECT YEAR(b.achievedAt) AS year
+        SELECT EXTRACT(YEAR FROM b.achievedAt) AS year
         FROM bucket_items b
         LEFT JOIN user_settings us ON us.userId = b.userId
         WHERE b.achieved = 1
@@ -641,7 +663,7 @@ export async function getPublicShareProfile(userId: number) {
   if (!db) return null;
 
   const userResult = await db.execute(
-    sql`SELECT u.id, u.name, us.displayName, us.avatarEmoji, us.isPublic
+    sql`SELECT u.id, u.name, us.displayName, us.avatarEmoji, us.avatarImageUrl, us.isPublic
       FROM users u
       LEFT JOIN user_settings us ON us.userId = u.id
       WHERE u.id = ${userId}
@@ -654,6 +676,7 @@ export async function getPublicShareProfile(userId: number) {
         name: string | null;
         displayName: string | null;
         avatarEmoji: string | null;
+        avatarImageUrl: string | null;
         isPublic: boolean | null;
       }
     | undefined;
@@ -680,6 +703,7 @@ export async function getPublicShareProfile(userId: number) {
     userId: profile.id,
     displayName: profile.displayName ?? profile.name ?? "Explorer",
     avatarEmoji: profile.avatarEmoji,
+    avatarImageUrl: profile.avatarImageUrl,
     totalCount: goals.length,
     achievedCount,
     goals,

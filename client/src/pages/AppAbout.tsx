@@ -17,7 +17,7 @@ export default function AppAbout() {
           </h3>
           <p className="text-sm leading-relaxed" style={{ fontFamily: "'Courier Prime', monospace" }}>
             Bucket List is your personal space to capture the experiences, adventures, and dreams
-            you want to accomplish in this lifetime. Think of it as a living document — a sketch
+            you want to accomplish in this lifetime. Think of it as a living document - a sketch
             of the life you're designing, one goal at a time.
           </p>
         </div>
@@ -29,7 +29,7 @@ export default function AppAbout() {
           <div className="space-y-3">
             {[
               { icon: "⠿", text: "Drag the grip handle on the left to reorder your goals by priority." },
-              { icon: "☑", text: "Click the checkbox to toggle a goal as achieved — it will show with a strikethrough." },
+              { icon: "☑", text: "Click the checkbox to toggle a goal as achieved - it will show with a strikethrough." },
               { icon: "◈", text: "Keep your profile public to appear on the leaderboard and inspire others." },
               { icon: "◈", text: "Add descriptions to your goals to capture the 'why' behind each dream." },
               { icon: "⊕", text: "Browse New Goals to discover goals added by other users with pagination." },

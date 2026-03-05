@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import os from "node:os";
+import path from "node:path";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -29,9 +31,11 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  const localAvatarDir = path.join(os.tmpdir(), "bucket-list-app-avatars");
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  app.use("/api/uploads/avatars", express.static(localAvatarDir, { maxAge: "7d" }));
   // tRPC API
   app.use(
     "/api/trpc",

@@ -133,6 +133,16 @@
     font-weight: 700;
     letter-spacing: 0.05em;
   }
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="url"],
+  input[type="tel"],
+  textarea {
+    caret-color: oklch(0.22 0.02 60);
+    caret-shape: block;
+  }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),
@@ -240,6 +250,47 @@
   .sketch-button:active {
     box-shadow: 1px 1px 0 oklch(0.22 0.02 60 / 0.3);
     filter: brightness(0.96);
+  }
+
+  .zoom-range {
+    appearance: none;
+    height: 4px;
+    border-radius: 999px;
+    background: oklch(0.86 0.02 78);
+    border: 1px solid oklch(0.65 0.04 70);
+  }
+
+  .zoom-range::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: oklch(0.86 0.02 78);
+  }
+
+  .zoom-range::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px;
+    height: 22px;
+    border-radius: 2px;
+    border: 2px solid oklch(0.22 0.02 60);
+    background: oklch(0.22 0.02 60);
+    margin-top: -10px;
+    box-shadow: 1px 1px 0 oklch(0.22 0.02 60 / 0.2);
+  }
+
+  .zoom-range::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: oklch(0.86 0.02 78);
+    border: 1px solid oklch(0.65 0.04 70);
+  }
+
+  .zoom-range::-moz-range-thumb {
+    width: 14px;
+    height: 22px;
+    border-radius: 2px;
+    border: 2px solid oklch(0.22 0.02 60);
+    background: oklch(0.22 0.02 60);
+    box-shadow: 1px 1px 0 oklch(0.22 0.02 60 / 0.2);
   }
 
   /* Header auth buttons: independent feedback without shifting sibling button */
