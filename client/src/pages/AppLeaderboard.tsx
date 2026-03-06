@@ -1,6 +1,6 @@
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Users, Loader2 } from "lucide-react";
+import { Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import UserAvatar from "@/components/UserAvatar";
 import GoalPreviewModal from "@/components/GoalPreviewModal";
@@ -63,6 +63,7 @@ export default function AppLeaderboard() {
 
   const isLoading = activeTab === "goals" ? goalsLoading : usersLoading;
   const data = activeTab === "goals" ? goalLeaderboard : userLeaderboard;
+  const skeletonRows = Array.from({ length: 8 });
 
   return (
     <div className="py-4">
@@ -130,9 +131,34 @@ export default function AppLeaderboard() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16 gap-3">
-          <Loader2 className="animate-spin" size={20} />
-          <span style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}>loading...</span>
+        <div className="flex flex-col gap-2">
+          {skeletonRows.map((_, index) => (
+            <div
+              key={`leaderboard-skeleton-${index}`}
+              className="sketch-border bg-background/60 px-3 md:px-4 py-3 animate-pulse"
+            >
+              {activeTab === "goals" ? (
+                <div className="flex items-start md:items-center gap-3">
+                  <div className="w-8 h-8 rounded bg-muted/70 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 w-[62%] rounded bg-muted/70 mb-2" />
+                    <div className="h-3 w-20 rounded bg-muted/60" />
+                  </div>
+                  <div className="w-16 h-7 rounded bg-muted/60 flex-shrink-0" />
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded bg-muted/70 flex-shrink-0" />
+                  <div className="w-9 h-9 rounded-full bg-muted/70 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 w-[45%] rounded bg-muted/70 mb-2" />
+                    <div className="h-3 w-[28%] rounded bg-muted/60" />
+                  </div>
+                  <div className="w-20 h-8 rounded bg-muted/60 flex-shrink-0" />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       ) : !data || data.length === 0 ? (
         <div className="text-center py-16">

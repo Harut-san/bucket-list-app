@@ -556,6 +556,10 @@ export async function getTopGoalsByYear(limit = 100, year?: number) {
 export async function getTopUsers(limit = 100) {
   const db = await getDb();
   if (!db) return [];
+  const hasAvatarImageUrl = await supportsAvatarImageUrlColumn(db);
+  const avatarImageSql = hasAvatarImageUrl
+    ? sql`MAX(us.avatarImageUrl)`
+    : sql`NULL`;
 
   const result = await db.execute(
     sql`SELECT u.id, u.name, u.email,
@@ -563,7 +567,7 @@ export async function getTopUsers(limit = 100) {
         COUNT(b.id) as totalCount,
         COUNT(b.id) as addedCountInYear,
         COUNT(CASE WHEN b.achieved = 1 THEN 1 END) as achievedCountInYear,
-        MAX(us.displayName) as displayName, MAX(us.avatarEmoji) as avatarEmoji, NULL as avatarImageUrl, MAX(us.isPublic) as isPublic
+        MAX(us.displayName) as displayName, MAX(us.avatarEmoji) as avatarEmoji, ${avatarImageSql} as avatarImageUrl, MAX(us.isPublic) as isPublic
       FROM users u
       LEFT JOIN bucket_items b ON b.userId = u.id
       LEFT JOIN user_settings us ON us.userId = u.id
@@ -610,6 +614,10 @@ export async function getTopUsersByYear(limit = 100, year?: number) {
 
   const db = await getDb();
   if (!db) return [];
+  const hasAvatarImageUrl = await supportsAvatarImageUrlColumn(db);
+  const avatarImageSql = hasAvatarImageUrl
+    ? sql`MAX(us.avatarImageUrl)`
+    : sql`NULL`;
 
   const result = await db.execute(
     sql`SELECT u.id, u.name, u.email,
@@ -617,7 +625,7 @@ export async function getTopUsersByYear(limit = 100, year?: number) {
         COUNT(b.id) as totalCount,
         COUNT(CASE WHEN EXTRACT(YEAR FROM b.createdAt) = ${year} THEN 1 END) as addedCountInYear,
         COUNT(CASE WHEN b.achieved = 1 AND EXTRACT(YEAR FROM b.achievedAt) = ${year} THEN 1 END) as achievedCountInYear,
-        MAX(us.displayName) as displayName, MAX(us.avatarEmoji) as avatarEmoji, NULL as avatarImageUrl, MAX(us.isPublic) as isPublic
+        MAX(us.displayName) as displayName, MAX(us.avatarEmoji) as avatarEmoji, ${avatarImageSql} as avatarImageUrl, MAX(us.isPublic) as isPublic
       FROM users u
       LEFT JOIN bucket_items b ON b.userId = u.id
       LEFT JOIN user_settings us ON us.userId = u.id

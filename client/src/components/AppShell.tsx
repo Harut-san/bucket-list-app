@@ -124,11 +124,12 @@ function SketchDecoration() {
 }
 
 export default function AppShell({ children }: AppShellProps) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [rankInsightsOpen, setRankInsightsOpen] = useState(false);
+  const [pendingOpenAddGoal, setPendingOpenAddGoal] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const creditsRef = useRef<HTMLDivElement | null>(null);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
@@ -171,6 +172,20 @@ export default function AppShell({ children }: AppShellProps) {
     if (percentile <= 50) return "Steady Climber";
     return "New Starter";
   })();
+
+  const emitAddGoalEvent = () => {
+    window.dispatchEvent(new CustomEvent("bucketlist:add-goal"));
+  };
+
+  const handleMobileAddGoal = () => {
+    setMobileOpen(false);
+    if (location === "/app") {
+      emitAddGoalEvent();
+      return;
+    }
+    setPendingOpenAddGoal(true);
+    navigate("/app");
+  };
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -230,6 +245,15 @@ export default function AppShell({ children }: AppShellProps) {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (!pendingOpenAddGoal || location !== "/app") return;
+    const timeout = window.setTimeout(() => {
+      emitAddGoalEvent();
+      setPendingOpenAddGoal(false);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [location, pendingOpenAddGoal]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start p-5 md:p-[70px]">
@@ -408,6 +432,17 @@ export default function AppShell({ children }: AppShellProps) {
                           />
                         </div>
                       )}
+                      <div className="px-2 pb-2">
+                        <button
+                          type="button"
+                          onClick={handleMobileAddGoal}
+                          className="w-full sketch-button text-left px-3 py-2 my-[2px] bg-foreground text-background border-foreground"
+                          style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}
+                        >
+                          Add goal
+                        </button>
+                      </div>
+                      <div className="pencil-line my-1" />
                       <div className="space-y-[2px]">
                         {appNavItems.map((item) => (
                           <Link key={item.href} href={item.href}>

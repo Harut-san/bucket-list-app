@@ -41,8 +41,6 @@ import {
   Share2,
   Link2,
   ImageDown,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 import { toast } from "sonner";
 // BucketItem type inline
@@ -593,16 +591,15 @@ export default function MyBucketList() {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [dragOverlayWidth, setDragOverlayWidth] = useState<number | null>(null);
   const [snapshotPreview, setSnapshotPreview] = useState<{ url: string; blob: Blob } | null>(null);
-  const [snapshotZoom, setSnapshotZoom] = useState(1);
   const [addingQuizGoalTitles, setAddingQuizGoalTitles] = useState<string[]>([]);
   const [addedQuizGoalTitles, setAddedQuizGoalTitles] = useState<string[]>([]);
+  const yearFilteredItems = selectedYear == null
+    ? items
+    : items.filter((item) => new Date(item.createdAt).getFullYear() === selectedYear);
   const displayItems = selectedCategory
-    ? items.filter((item) => item.category === selectedCategory)
-    : items;
-  const shareSnapshotItems = displayItems.filter((item) => {
-    if (selectedYear == null) return true;
-    return new Date(item.createdAt).getFullYear() === selectedYear;
-  });
+    ? yearFilteredItems.filter((item) => item.category === selectedCategory)
+    : yearFilteredItems;
+  const shareSnapshotItems = displayItems;
   const yearlySummaryQuery = trpc.bucketList.yearlySummary.useQuery({
     year: selectedYear ?? undefined,
   });
@@ -687,6 +684,16 @@ export default function MyBucketList() {
   });
   const addGoalSilently = trpc.bucketList.add.useMutation();
 
+  useEffect(() => {
+    const handleOpenAddGoal = () => {
+      setShowForm(true);
+    };
+    window.addEventListener("bucketlist:add-goal", handleOpenAddGoal);
+    return () => {
+      window.removeEventListener("bucketlist:add-goal", handleOpenAddGoal);
+    };
+  }, []);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -723,7 +730,7 @@ export default function MyBucketList() {
 
   const achieved = displayItems.filter((i) => i.achieved).length;
   const total = displayItems.length;
-  const categoryCounts = items.reduce<Record<string, number>>((acc, item) => {
+  const categoryCounts = yearFilteredItems.reduce<Record<string, number>>((acc, item) => {
     if (!item.category) return acc;
     acc[item.category] = (acc[item.category] ?? 0) + 1;
     return acc;
@@ -854,7 +861,6 @@ export default function MyBucketList() {
       URL.revokeObjectURL(snapshotPreview.url);
     }
     setSnapshotPreview(null);
-    setSnapshotZoom(1);
   };
 
   const handleConfirmCopySnapshot = async () => {
@@ -895,7 +901,6 @@ export default function MyBucketList() {
         URL.revokeObjectURL(snapshotPreview.url);
       }
       setSnapshotPreview({ blob: snapshotBlob, url: URL.createObjectURL(snapshotBlob) });
-      setSnapshotZoom(1);
     } catch {
       toast.error("Failed to create snapshot");
     }
@@ -990,7 +995,7 @@ export default function MyBucketList() {
             onClick={() => setSelectedCategory(null)}
             style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
           >
-            All ({items.length})
+            All ({yearFilteredItems.length})
           </button>
           {sortedCategories.map((category) => (
             (() => {
@@ -1415,30 +1420,11 @@ export default function MyBucketList() {
                   <X size={17} />
                 </button>
               </div>
-              <div className="mb-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  className="sketch-button px-3 py-1.5 bg-background"
-                  onClick={() => setSnapshotZoom((zoom) => Math.max(0.5, Number((zoom - 0.1).toFixed(2))))}
-                >
-                  <ZoomOut size={14} />
-                </button>
-                <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
-                  Zoom {Math.round(snapshotZoom * 100)}%
-                </span>
-                <button
-                  type="button"
-                  className="sketch-button px-3 py-1.5 bg-background"
-                  onClick={() => setSnapshotZoom((zoom) => Math.min(2.5, Number((zoom + 0.1).toFixed(2))))}
-                >
-                  <ZoomIn size={14} />
-                </button>
-              </div>
               <div className="sketch-border bg-background/70 p-3 max-h-[65vh] overflow-auto flex justify-center">
                 <img
                   src={snapshotPreview.url}
                   alt="Bucket list snapshot preview"
-                  style={{ transform: `scale(${snapshotZoom})`, transformOrigin: "top center", maxWidth: "100%", height: "auto" }}
+                  style={{ maxWidth: "100%", height: "auto" }}
                 />
               </div>
               <div className="mt-3 flex justify-end gap-2">
