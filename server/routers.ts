@@ -279,6 +279,7 @@ export const appRouter = router({
           category,
           search,
           excludeUserId,
+          currentUserId: ctx.user?.id,
           publicOnly: true,
           sortBy,
           sortDirection,

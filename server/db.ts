@@ -318,6 +318,7 @@ export async function getCommunityGoalsPage(options: {
   category?: string;
   search?: string;
   excludeUserId?: number;
+  currentUserId?: number;
   publicOnly?: boolean;
   sortBy?: "popular" | "createdAt";
   sortDirection?: "asc" | "desc";
@@ -355,25 +356,63 @@ export async function getCommunityGoalsPage(options: {
   const latestDirectionSql = sortDirection === "asc" ? sql`ASC` : sql`DESC`;
   const popularityDirectionSql = sortDirection === "asc" ? sql`ASC` : sql`DESC`;
   const titleDirectionSql = sortDirection === "asc" ? sql`ASC` : sql`DESC`;
+  const currentUserId = options.currentUserId;
 
   const orderSql =
     sortBy === "createdAt"
-      ? sql`ORDER BY latestAt ${latestDirectionSql}, addedCount DESC, b.title ASC`
-      : sql`ORDER BY addedCount ${popularityDirectionSql}, latestAt DESC, b.title ${titleDirectionSql}`;
+      ? currentUserId != null
+        ? sql`ORDER BY alreadyAdded ASC, latestAt ${latestDirectionSql}, addedCount DESC, title ASC`
+        : sql`ORDER BY latestAt ${latestDirectionSql}, addedCount DESC, title ASC`
+      : currentUserId != null
+      ? sql`ORDER BY alreadyAdded ASC, addedCount ${popularityDirectionSql}, latestAt DESC, title ${titleDirectionSql}`
+      : sql`ORDER BY addedCount ${popularityDirectionSql}, latestAt DESC, title ${titleDirectionSql}`;
 
-  const itemsResult = await db.execute(sql`
-    SELECT
-      b.title,
-      b.category,
-      COUNT(DISTINCT b.userId) AS addedCount,
-      MAX(b.createdAt) AS latestAt
-    FROM bucket_items b
-    LEFT JOIN user_settings us ON us.userId = b.userId
-    ${whereSql}
-    GROUP BY b.title, b.category
-    ${orderSql}
-    LIMIT ${pageSize} OFFSET ${offset}
-  `);
+  const itemsResult =
+    currentUserId != null
+      ? await db.execute(sql`
+          WITH grouped_goals AS (
+            SELECT
+              b.title,
+              b.category,
+              COUNT(DISTINCT b.userId) AS addedCount,
+              MAX(b.createdAt) AS latestAt
+            FROM bucket_items b
+            LEFT JOIN user_settings us ON us.userId = b.userId
+            ${whereSql}
+            GROUP BY b.title, b.category
+          )
+          SELECT
+            gg.title,
+            gg.category,
+            gg.addedCount,
+            gg.latestAt,
+            CASE
+              WHEN EXISTS (
+                SELECT 1
+                FROM bucket_items mine
+                WHERE mine.userId = ${currentUserId}
+                  AND LOWER(TRIM(mine.title)) = LOWER(TRIM(gg.title))
+              ) THEN 1
+              ELSE 0
+            END AS alreadyAdded
+          FROM grouped_goals gg
+          ${orderSql}
+          LIMIT ${pageSize} OFFSET ${offset}
+        `)
+      : await db.execute(sql`
+          SELECT
+            b.title,
+            b.category,
+            COUNT(DISTINCT b.userId) AS addedCount,
+            MAX(b.createdAt) AS latestAt,
+            0 AS alreadyAdded
+          FROM bucket_items b
+          LEFT JOIN user_settings us ON us.userId = b.userId
+          ${whereSql}
+          GROUP BY b.title, b.category
+          ${orderSql}
+          LIMIT ${pageSize} OFFSET ${offset}
+        `);
 
   const totalResult = await db.execute(sql`
     SELECT COUNT(*) AS total
@@ -408,16 +447,47 @@ export async function getCommunityGoalsPage(options: {
         : sql``;
     const fallbackOrderSql =
       sortBy === "createdAt"
-        ? sql`ORDER BY g.createdAt ${latestDirectionSql}, g.addedCount DESC, g.title ASC`
-        : sql`ORDER BY g.addedCount ${popularityDirectionSql}, g.createdAt DESC, g.title ${titleDirectionSql}`;
+        ? currentUserId != null
+          ? sql`ORDER BY alreadyAdded ASC, createdAt ${latestDirectionSql}, addedCount DESC, title ASC`
+          : sql`ORDER BY createdAt ${latestDirectionSql}, addedCount DESC, title ASC`
+        : currentUserId != null
+        ? sql`ORDER BY alreadyAdded ASC, addedCount ${popularityDirectionSql}, createdAt DESC, title ${titleDirectionSql}`
+        : sql`ORDER BY addedCount ${popularityDirectionSql}, createdAt DESC, title ${titleDirectionSql}`;
 
-    const fallbackItemsResult = await db.execute(sql`
-      SELECT g.title, g.category, g.addedCount
-      FROM global_goals g
-      ${fallbackConditions}
-      ${fallbackOrderSql}
-      LIMIT ${pageSize} OFFSET ${offset}
-    `);
+    const fallbackItemsResult =
+      currentUserId != null
+        ? await db.execute(sql`
+            SELECT
+              g.title,
+              g.category,
+              g.addedCount,
+              g.createdAt,
+              CASE
+                WHEN EXISTS (
+                  SELECT 1
+                  FROM bucket_items mine
+                  WHERE mine.userId = ${currentUserId}
+                    AND LOWER(TRIM(mine.title)) = LOWER(TRIM(g.title))
+                ) THEN 1
+                ELSE 0
+              END AS alreadyAdded
+            FROM global_goals g
+            ${fallbackConditions}
+            ${fallbackOrderSql}
+            LIMIT ${pageSize} OFFSET ${offset}
+          `)
+        : await db.execute(sql`
+            SELECT
+              g.title,
+              g.category,
+              g.addedCount,
+              g.createdAt,
+              0 AS alreadyAdded
+            FROM global_goals g
+            ${fallbackConditions}
+            ${fallbackOrderSql}
+            LIMIT ${pageSize} OFFSET ${offset}
+          `);
 
     const fallbackTotalResult = await db.execute(sql`
       SELECT COUNT(*) AS total

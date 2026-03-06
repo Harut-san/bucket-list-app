@@ -78,7 +78,7 @@ export default function PublicShell({ children }: PublicShellProps) {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start p-5 md:p-[70px]">
+    <div className="min-h-screen flex flex-col items-center justify-start p-5 min-[860px]:p-[70px]">
       {/* Main card */}
       <motion.div
         layout
@@ -89,7 +89,7 @@ export default function PublicShell({ children }: PublicShellProps) {
         <SketchDecoration />
 
         {/* Header */}
-        <div className="relative z-20 px-4 md:px-6 pt-6 pb-4">
+        <div className="relative z-20 px-4 min-[860px]:px-6 pt-6 pb-4">
           {/* Title row */}
           <div className="flex items-start justify-between gap-4 mb-1">
             <Link href="/">
@@ -110,7 +110,7 @@ export default function PublicShell({ children }: PublicShellProps) {
             </Link>
 
             {/* Desktop auth */}
-            <div className={`hidden md:flex flex-col items-end gap-1 w-[104px] shrink-0 ${isAuthPage ? "invisible" : ""}`}>
+            <div className={`hidden min-[860px]:flex flex-col items-end gap-1 w-[104px] shrink-0 ${isAuthPage ? "invisible" : ""}`}>
                 <Link href="/login" className="block w-full">
                   <button
                     className="sketch-button auth-stack-button w-full h-8 px-2 text-xs"
@@ -138,7 +138,7 @@ export default function PublicShell({ children }: PublicShellProps) {
             </div>
 
             {/* Mobile menu button */}
-            <div className={`md:hidden relative ${isAuthPage ? "invisible" : ""}`} ref={mobileMenuRef}>
+            <div className={`min-[860px]:hidden relative ${isAuthPage ? "invisible" : ""}`} ref={mobileMenuRef}>
               <button
                 className={`sketch-button p-2 bg-background mt-1 hamburger-button ${mobileOpen ? "open" : ""}`}
                 onClick={() => setMobileOpen((open) => !open)}
@@ -212,7 +212,7 @@ export default function PublicShell({ children }: PublicShellProps) {
           </div>
 
           {/* Desktop nav */}
-          <nav className={isAuthPage ? "hidden" : "hidden md:flex items-center gap-1 mt-4"}>
+          <nav className={isAuthPage ? "hidden" : "hidden min-[860px]:flex items-center gap-1 mt-4"}>
             {publicNavItems.map((item) => (
               <Link key={item.href} href={item.href}>
                 <span
@@ -241,14 +241,14 @@ export default function PublicShell({ children }: PublicShellProps) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.2 }}
-            className="relative z-10 px-4 md:px-6 pb-6 flex-1"
+            className="relative z-10 px-4 min-[860px]:px-6 pb-6 flex-1"
           >
             {children}
           </motion.div>
         </AnimatePresence>
 
         {/* Footer */}
-        <div className="relative z-10 px-4 md:px-6 pb-4 mt-auto">
+        <div className="relative z-10 px-4 min-[860px]:px-6 pb-4 mt-auto">
           <div className="pencil-line mb-3" />
           <div className="flex justify-between items-center text-xs opacity-50" style={{ fontFamily: "'Courier Prime', monospace" }}>
             <span>© {new Date().getFullYear()} BUCKET_LIST_APP</span>

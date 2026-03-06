@@ -256,7 +256,7 @@ export default function AppShell({ children }: AppShellProps) {
   }, [location, pendingOpenAddGoal]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start p-5 md:p-[70px]">
+    <div className="min-h-screen flex flex-col items-center justify-start p-5 min-[860px]:p-[70px]">
       <motion.div
         layout
         transition={{ layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] } }}
@@ -265,7 +265,7 @@ export default function AppShell({ children }: AppShellProps) {
       >
         <SketchDecoration />
         {/* Header */}
-        <div className="relative z-30 px-4 md:px-6 pt-6 pb-4">
+        <div className="relative z-30 px-4 min-[860px]:px-6 pt-6 pb-4">
           <div className="flex items-start justify-between gap-4 mb-2">
             {/* Title */}
             <Link href="/app">
@@ -286,7 +286,7 @@ export default function AppShell({ children }: AppShellProps) {
             </Link>
 
             {/* Desktop right side */}
-            <div className="hidden md:flex items-stretch gap-3">
+            <div className="hidden min-[860px]:flex items-stretch gap-3">
               {stats && (
                 <ProgressBadge
                   total={stats.total}
@@ -319,7 +319,7 @@ export default function AppShell({ children }: AppShellProps) {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.12 }}
-                        className="hidden md:block fixed inset-0 z-[110] bg-[oklch(0.18_0.02_60_/_0.22)]"
+                        className="hidden min-[860px]:block fixed inset-0 z-[110] bg-[oklch(0.18_0.02_60_/_0.22)]"
                         onClick={() => setAccountMenuOpen(false)}
                         aria-label="Close account menu overlay"
                       />
@@ -377,7 +377,7 @@ export default function AppShell({ children }: AppShellProps) {
             </div>
 
             {/* Mobile menu button */}
-            <div className="md:hidden relative" ref={mobileMenuRef}>
+            <div className="min-[860px]:hidden relative" ref={mobileMenuRef}>
               <button
                 className={`sketch-button p-2 bg-background mt-1 hamburger-button ${mobileOpen ? "open" : ""}`}
                 onClick={() => setMobileOpen((open) => !open)}
@@ -494,7 +494,7 @@ export default function AppShell({ children }: AppShellProps) {
           </div>
 
           {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-1 mt-4">
+          <nav className="hidden min-[860px]:flex items-center gap-1 mt-4">
             {appNavItems.map((item) => (
               <Link key={item.href} href={item.href}>
                 <span
@@ -522,14 +522,14 @@ export default function AppShell({ children }: AppShellProps) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.2 }}
-            className="relative z-10 px-4 md:px-6 pb-6 flex-1"
+            className="relative z-10 px-4 min-[860px]:px-6 pb-6 flex-1"
           >
             {children}
           </motion.div>
         </AnimatePresence>
 
         {/* Footer */}
-        <div className="relative z-10 px-4 md:px-6 pb-4 mt-auto">
+        <div className="relative z-10 px-4 min-[860px]:px-6 pb-4 mt-auto">
           <div className="pencil-line mb-3" />
           <div className="flex justify-between items-center text-xs opacity-50" style={{ fontFamily: "'Courier Prime', monospace" }}>
             <span>© {new Date().getFullYear()} My Bucket List</span>

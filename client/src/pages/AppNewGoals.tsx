@@ -125,17 +125,27 @@ export default function AppNewGoals() {
       {/* Category filters - always visible */}
       <div className="flex flex-wrap gap-2 mb-5">
         {ALL_CATEGORIES.map((cat) => {
+          const isSelected = selectedCategory === cat.value;
+          const color =
+            cat.value && cat.value !== "__none__"
+              ? (CATEGORY_COLORS[cat.value] ?? "oklch(0.55 0.04 70)")
+              : null;
           return (
             <button
               key={cat.label}
-              className={`category-badge cursor-pointer transition-colors ${
-                selectedCategory === cat.value ? "bg-foreground text-background border-foreground" : ""
-              }`}
+              className="category-badge cursor-pointer transition-colors"
               onClick={() => {
                 setSelectedCategory(cat.value);
                 setPage(1);
               }}
-              style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+              style={{
+                fontFamily: "'Space Mono', monospace",
+                fontWeight: 600,
+                borderColor: color ?? undefined,
+                color: isSelected ? "oklch(0.18 0.02 60)" : color ?? undefined,
+                background: isSelected ? "oklch(0.94 0.02 82)" : undefined,
+                boxShadow: isSelected ? `inset 0 0 0 1px ${color ?? "oklch(0.22 0.02 60)"}` : undefined,
+              }}
             >
               {cat.label}
             </button>

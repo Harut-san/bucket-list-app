@@ -738,10 +738,10 @@ export default function MyBucketList() {
   const sortedCategories = Object.keys(categoryCounts).sort((a, b) => a.localeCompare(b));
   const avatarEmoji = normalizeAvatarEmoji(settings?.avatarEmoji);
   const displayName = settings?.displayName ?? user?.name ?? "Explorer";
-  const selectedYearStats = yearlySummaryQuery.data?.selectedYearStats ?? {
-    addedCount: 0,
-    achievedCount: 0,
-    completionRate: 0,
+  const filteredSummaryStats = {
+    addedCount: total,
+    achievedCount: achieved,
+    completionRate: total > 0 ? Math.round((achieved / total) * 100) : 0,
   };
   const availableYears = yearlySummaryQuery.data?.availableYears ?? [];
 
@@ -940,34 +940,10 @@ export default function MyBucketList() {
       </div>
 
       <div className="sketch-border p-4 bg-background/60 mb-4">
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          <span className="text-xs text-muted-foreground" style={{ fontFamily: "'Courier Prime', monospace" }}>
-            Yearly summary:
-          </span>
-          <button
-            type="button"
-            className={`category-badge transition-colors ${selectedYear === null ? "bg-foreground text-background border-foreground" : ""}`}
-            onClick={() => setSelectedYear(null)}
-            style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
-          >
-            All years
-          </button>
-          {availableYears.map((year) => (
-            <button
-              key={year}
-              type="button"
-              className={`category-badge transition-colors ${selectedYear === year ? "bg-foreground text-background border-foreground" : ""}`}
-              onClick={() => setSelectedYear(year)}
-              style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
-            >
-              {year}
-            </button>
-          ))}
-        </div>
         <div className="flex items-center gap-4 text-sm" style={{ fontFamily: "'Courier Prime', monospace" }}>
-          <span>Added: <b>{selectedYearStats.addedCount}</b></span>
-          <span>Achieved: <b>{selectedYearStats.achievedCount}</b></span>
-          <span>Completion: <b>{selectedYearStats.completionRate}%</b></span>
+          <span>Added: <b>{filteredSummaryStats.addedCount}</b></span>
+          <span>Achieved: <b>{filteredSummaryStats.achievedCount}</b></span>
+          <span>Completion: <b>{filteredSummaryStats.completionRate}%</b></span>
         </div>
       </div>
 
@@ -987,8 +963,29 @@ export default function MyBucketList() {
       )}
 
       {/* Category filters */}
-      {items.length > 0 && (
+      {(items.length > 0 || availableYears.length > 0) && (
         <div className="flex flex-wrap gap-2 mb-4">
+          <button
+            type="button"
+            className={`category-badge transition-colors ${selectedYear === null ? "bg-foreground text-background border-foreground" : ""}`}
+            onClick={() => setSelectedYear(null)}
+            style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+          >
+            All years
+          </button>
+          {availableYears.map((year) => (
+            <button
+              key={year}
+              type="button"
+              className={`category-badge transition-colors ${selectedYear === year ? "bg-foreground text-background border-foreground" : ""}`}
+              onClick={() => setSelectedYear(year)}
+              style={{ fontFamily: "'Space Mono', monospace", fontWeight: 600 }}
+            >
+              {year}
+            </button>
+          ))}
+          {items.length > 0 && <span className="mx-1 text-muted-foreground">|</span>}
+          {items.length > 0 && (
           <button
             type="button"
             className={`category-badge transition-colors ${selectedCategory === null ? "bg-foreground text-background border-foreground" : ""}`}
@@ -997,7 +994,8 @@ export default function MyBucketList() {
           >
             All ({yearFilteredItems.length})
           </button>
-          {sortedCategories.map((category) => (
+          )}
+          {items.length > 0 && sortedCategories.map((category) => (
             (() => {
               const color = CATEGORY_COLORS[category] ?? "oklch(0.55 0.04 70)";
               const isSelected = selectedCategory === category;
@@ -1404,7 +1402,7 @@ export default function MyBucketList() {
             onClick={handleCloseSnapshotPreview}
           >
             <div
-              className="sketch-card w-full max-w-3xl p-4"
+              className="sketch-card w-full max-w-xl p-4"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-3">
@@ -1420,11 +1418,11 @@ export default function MyBucketList() {
                   <X size={17} />
                 </button>
               </div>
-              <div className="sketch-border bg-background/70 p-3 max-h-[65vh] overflow-auto flex justify-center">
+              <div className="sketch-border bg-background/70 p-3 max-h-[70vh] overflow-auto flex justify-center">
                 <img
                   src={snapshotPreview.url}
                   alt="Bucket list snapshot preview"
-                  style={{ maxWidth: "100%", height: "auto" }}
+                  className="block mx-auto w-auto h-auto max-w-full max-h-[62vh] object-contain"
                 />
               </div>
               <div className="mt-3 flex justify-end gap-2">
